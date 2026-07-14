@@ -49,31 +49,129 @@ namespace TarkovPerformanceSuite.Features
 
     public readonly struct ValidatedConfiguration
     {
-        public ValidatedConfiguration(double captureSeconds, double shadowDistance, double updateIntervalSeconds)
+        public ValidatedConfiguration(
+            double captureSeconds,
+            double shadowDistance,
+            double updateIntervalSeconds,
+            double shadowMinimumDistance,
+            double shadowTargetFps,
+            double skinningDistance,
+            double skinningUpdateIntervalSeconds,
+            double skinningOffscreenHoldSeconds)
         {
             CaptureSeconds = captureSeconds;
             ShadowDistance = shadowDistance;
             UpdateIntervalSeconds = updateIntervalSeconds;
+            ShadowMinimumDistance = shadowMinimumDistance;
+            ShadowTargetFps = shadowTargetFps;
+            SkinningDistance = skinningDistance;
+            SkinningUpdateIntervalSeconds = skinningUpdateIntervalSeconds;
+            SkinningOffscreenHoldSeconds = skinningOffscreenHoldSeconds;
         }
         public double CaptureSeconds { get; }
         public double ShadowDistance { get; }
         public double UpdateIntervalSeconds { get; }
+        public double ShadowMinimumDistance { get; }
+        public double ShadowTargetFps { get; }
+        public double SkinningDistance { get; }
+        public double SkinningUpdateIntervalSeconds { get; }
+        public double SkinningOffscreenHoldSeconds { get; }
     }
 
     public static class ConfigurationValidator
     {
         public static ValidatedConfiguration Validate(double captureSeconds, double shadowDistance, double updateIntervalSeconds)
         {
+            return Validate(captureSeconds, shadowDistance, updateIntervalSeconds, 60, 60, 80, 0.1, 0.5);
+        }
+
+        public static ValidatedConfiguration Validate(
+            double captureSeconds,
+            double shadowDistance,
+            double updateIntervalSeconds,
+            double shadowMinimumDistance,
+            double shadowTargetFps,
+            double skinningDistance,
+            double skinningUpdateIntervalSeconds,
+            double skinningOffscreenHoldSeconds)
+        {
+            double validatedShadowDistance = Clamp(shadowDistance, 20, 1000);
             return new ValidatedConfiguration(
                 Clamp(captureSeconds, 5, 900),
-                Clamp(shadowDistance, 20, 1000),
-                Clamp(updateIntervalSeconds, 0.1, 5));
+                validatedShadowDistance,
+                Clamp(updateIntervalSeconds, 0.1, 5),
+                Clamp(shadowMinimumDistance, 20, validatedShadowDistance),
+                Clamp(shadowTargetFps, 20, 240),
+                Clamp(skinningDistance, 20, 1000),
+                Clamp(skinningUpdateIntervalSeconds, 0.05, 5),
+                Clamp(skinningOffscreenHoldSeconds, 0.1, 10));
         }
 
         private static double Clamp(double value, double min, double max)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) return min;
             return value < min ? min : value > max ? max : value;
+        }
+    }
+
+    public sealed class AdaptiveDistanceController
+    {
+        private double _smoothedFrameMs;
+        private double _pressureSeconds;
+        private double _recoverySeconds;
+
+        public double EffectiveDistance { get; private set; }
+        public double SmoothedFrameMs => _smoothedFrameMs;
+
+        public void Reset(double maximumDistance)
+        {
+            EffectiveDistance = maximumDistance;
+            _smoothedFrameMs = 0;
+            _pressureSeconds = 0;
+            _recoverySeconds = 0;
+        }
+
+        public double Update(double deltaSeconds, double frameTimeMs, double maximumDistance, double minimumDistance, double targetFps)
+        {
+            maximumDistance = Math.Max(20, maximumDistance);
+            minimumDistance = Math.Max(20, Math.Min(maximumDistance, minimumDistance));
+            targetFps = Math.Max(20, Math.Min(240, targetFps));
+            deltaSeconds = Math.Max(0, Math.Min(0.25, deltaSeconds));
+
+            double targetFrameMs = 1000.0 / targetFps;
+            if (EffectiveDistance <= 0 || EffectiveDistance > maximumDistance) EffectiveDistance = maximumDistance;
+            if (_smoothedFrameMs <= 0) _smoothedFrameMs = targetFrameMs;
+            double alpha = 1.0 - Math.Exp(-deltaSeconds / 0.5);
+            _smoothedFrameMs += (frameTimeMs - _smoothedFrameMs) * alpha;
+
+            if (_smoothedFrameMs > targetFrameMs + 1.0)
+            {
+                _pressureSeconds += deltaSeconds;
+                _recoverySeconds = 0;
+                if (_pressureSeconds >= 0.75)
+                {
+                    EffectiveDistance = Math.Max(minimumDistance, EffectiveDistance - 15.0);
+                    _pressureSeconds = 0;
+                }
+            }
+            else if (_smoothedFrameMs < targetFrameMs - 1.5)
+            {
+                _recoverySeconds += deltaSeconds;
+                _pressureSeconds = 0;
+                if (_recoverySeconds >= 4.0)
+                {
+                    EffectiveDistance = Math.Min(maximumDistance, EffectiveDistance + 10.0);
+                    _recoverySeconds = 0;
+                }
+            }
+            else
+            {
+                _pressureSeconds = 0;
+                _recoverySeconds = 0;
+            }
+
+            if (EffectiveDistance < minimumDistance) EffectiveDistance = minimumDistance;
+            return EffectiveDistance;
         }
     }
 
@@ -143,4 +241,3 @@ namespace TarkovPerformanceSuite.Features
         public void Clear() => _states.Clear();
     }
 }
-

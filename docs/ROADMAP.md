@@ -1,10 +1,10 @@
-# Roadmap (documentation only)
+# Roadmap
 
-Nothing below is implemented in 0.1.0.
+Version 0.2.0 implements only adaptive remote-AI shadow distance and a disabled-by-default offscreen skinned-mesh isolation experiment. It does not throttle observed-player update methods, packets, AI authority, combat, physics, or animation controllers.
 
 ## Stage A - Isolation experiments
 
-Individually benchmark remote shadows, Animator, IK, procedural weapon animation, audio/surface checks, Fika `ManualStateUpdate`, base EFT player update methods, corpse rigidbodies, particles/transients, global player-manager iteration, render submission/culling, and garbage hot paths.
+Continue independently benchmarking remote shadows, offscreen skinning, Animator, IK, procedural weapon animation, audio/surface checks, Fika `ManualStateUpdate`, exact Fika observed-player late/visual methods, corpse rigidbodies, particles/transients, global player-manager iteration, render submission/culling, and garbage hot paths.
 
 ## Stage B - Presentation LOD
 
@@ -41,4 +41,3 @@ Only if Harmony cannot safely implement a measured optimization. It must be a se
 ## Stage J - Experimental GPU rendering
 
 Only if profiling proves render submission dominant: limited identical static decorative meshes, reversible original renderers, preserved colliders, main/scope camera support, disabled by default. Never replace EFT's complete renderer.
-

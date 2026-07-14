@@ -50,7 +50,7 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             _logger.LogInfo($"Benchmark capture started: {durationSeconds:F0} seconds, map {_map}, {_features}");
         }
 
-        internal bool Record(double now, double frameTimeMs, ProfilerMetrics metrics, EntityCounts counts, int? fikaServerFps)
+        internal bool Record(double now, double frameTimeMs, ProfilerMetrics metrics, EntityCounts counts, ShadowFeatureCounters shadows, SkinningFeatureCounters skinning, int? fikaServerFps)
         {
             if (!IsCapturing) return false;
             ElapsedSeconds = now - _startedRealtime;
@@ -81,6 +81,9 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                     AnimatorCount = counts.Animators,
                     SkinnedRendererCount = counts.SkinnedRenderers,
                     ShadowRendererCount = counts.ShadowRenderers,
+                    ShadowEffectiveDistance = shadows.EffectiveDistance,
+                    ShadowDisabledRendererCount = shadows.DisabledRenderers,
+                    SkinningModifiedRendererCount = skinning.ModifiedRenderers,
                     FikaServerFps = fikaServerFps
                 };
                 _sumFps += fps;

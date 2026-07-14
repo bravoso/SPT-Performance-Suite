@@ -30,8 +30,8 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             fika.GetCounts(out int fikaObserved, out int fikaAi, out int fikaVisibleAi);
 
             _builder.Clear();
-            _builder.AppendLine("Tarkov Performance Suite 0.1.1  [Num7 overlay | Num8 capture | Num9 report | Num6 experiment | F12 settings]");
-            _builder.Append("State: ").Append(raidState).Append(" | Experiment: ").AppendLine(experimentStatus);
+            _builder.AppendLine("Tarkov Performance Suite 0.2.0  [Num7 overlay | Num8 capture | Num9 report | Num6 shadows | Num5 skinning | F12 settings]");
+            _builder.Append("State: ").Append(raidState).Append(" | Experiments: ").AppendLine(experimentStatus);
             _builder.Append("FPS ").Append(fps.ToString("F1")).Append(" | frame ").Append(instantMs.ToString("F2")).Append(" ms | avg ").Append(stats.AverageMs.ToString("F2"))
                 .Append(" | median ").Append(stats.MedianMs.ToString("F2")).Append(" | p95 ").Append(stats.P95Ms.ToString("F2")).Append(" | p99 ").Append(stats.P99Ms.ToString("F2")).AppendLine(" ms");
             _builder.Append("Capture: ").Append(capture.IsCapturing ? capture.ElapsedSeconds.ToString("F1") + "/" + capture.DurationSeconds.ToString("F0") + " s" : "idle")

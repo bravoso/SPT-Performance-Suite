@@ -12,14 +12,16 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 {
     internal readonly struct ShadowFeatureCounters
     {
-        internal ShadowFeatureCounters(int ai, int beyond, int tracked, int disabled, double averageMs)
+        internal ShadowFeatureCounters(int ai, int beyond, int tracked, int disabled, double effectiveDistance, double averageMs)
         {
-            RegisteredAi = ai; BeyondThreshold = beyond; TrackedRenderers = tracked; DisabledRenderers = disabled; AverageMs = averageMs;
+            RegisteredAi = ai; BeyondThreshold = beyond; TrackedRenderers = tracked; DisabledRenderers = disabled;
+            EffectiveDistance = effectiveDistance; AverageMs = averageMs;
         }
         internal int RegisteredAi { get; }
         internal int BeyondThreshold { get; }
         internal int TrackedRenderers { get; }
         internal int DisabledRenderers { get; }
+        internal double EffectiveDistance { get; }
         internal double AverageMs { get; }
     }
 
@@ -30,6 +32,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private readonly EntityRegistry _registry;
         private readonly RecentExceptionLog _exceptions;
         private readonly CircuitBreaker _breaker = new CircuitBreaker(3);
+        private readonly AdaptiveDistanceController _adaptiveDistance = new AdaptiveDistanceController();
         private readonly Dictionary<Renderer, ShadowCastingMode> _originalStates = new Dictionary<Renderer, ShadowCastingMode>(512);
         private readonly HashSet<Renderer> _seenThisTick = new HashSet<Renderer>();
         private readonly List<Renderer> _restoreBuffer = new List<Renderer>(128);
@@ -65,6 +68,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         {
             _raidActive = true;
             _nextUpdate = 0;
+            _adaptiveDistance.Reset(_configuration.Validated.ShadowDistance);
             _counters = default;
         }
 
@@ -127,6 +131,20 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             }
         }
 
+        internal void ObserveFrame(double deltaSeconds, double cpuMainThreadMs)
+        {
+            if (!IsEnabled || !_raidActive) return;
+            ValidatedConfiguration configuration = _configuration.Validated;
+            if (_configuration.ShadowAdaptiveEnabled.Value)
+            {
+                _adaptiveDistance.Update(deltaSeconds, cpuMainThreadMs, configuration.ShadowDistance, configuration.ShadowMinimumDistance, configuration.ShadowTargetFps);
+            }
+            else if (Math.Abs(_adaptiveDistance.EffectiveDistance - configuration.ShadowDistance) > 0.01)
+            {
+                _adaptiveDistance.Reset(configuration.ShadowDistance);
+            }
+        }
+
         private void ProcessEntities()
         {
             bool haveLocal = false;
@@ -142,7 +160,9 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             }
             if (!haveLocal) return;
 
-            float distance = (float)_configuration.Validated.ShadowDistance;
+            ValidatedConfiguration configuration = _configuration.Validated;
+            float distance = (float)(_configuration.ShadowAdaptiveEnabled.Value ? _adaptiveDistance.EffectiveDistance : configuration.ShadowDistance);
+            if (distance <= 0) distance = (float)configuration.ShadowDistance;
             float distanceSquared = distance * distance;
             int ai = 0, beyond = 0, tracked = 0, disabled = 0;
             _seenThisTick.Clear();
@@ -177,7 +197,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             }
 
             if (!DryRun) RestoreNoLongerTracked();
-            _counters = new ShadowFeatureCounters(ai, beyond, tracked, DryRun ? 0 : _originalStates.Count, _averageMs);
+            _counters = new ShadowFeatureCounters(ai, beyond, tracked, DryRun ? 0 : _originalStates.Count, distance, _averageMs);
         }
 
         private static bool IsEligibleRenderer(Renderer renderer)

@@ -23,7 +23,7 @@ Version 0.1.1 records every enumerated `TimeNanoseconds` marker except the unini
 - Shadow Casters Count
 - Visible Skinned Meshes Count
 
-The inspected runtime exposed separate `CPU Main Thread Frame Time`, `CPU Render Thread Frame Time`, `CPU Total Frame Time`, `GPU Frame Time`, `FrameTime.GPU`, `Gfx.WaitForPresentOnGfxThread`, `PlayerLoop`, `WaitForTargetFPS`, and `GC.Collect` markers. All are converted from nanoseconds to milliseconds in the overlay, CSV/JSON capture, and F10 report.
+The inspected runtime exposed separate `CPU Main Thread Frame Time`, `CPU Render Thread Frame Time`, `CPU Total Frame Time`, `GPU Frame Time`, `FrameTime.GPU`, `Gfx.WaitForPresentOnGfxThread`, `PlayerLoop`, `WaitForTargetFPS`, and `GC.Collect` markers. All are converted from nanoseconds to milliseconds in the overlay, CSV/JSON capture, and Num9 report.
 
 Missing values display as `n/a` and serialize as an empty CSV field / JSON `null`. Every recorder is disposed at raid end and plugin destruction.
 

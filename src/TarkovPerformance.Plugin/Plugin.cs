@@ -19,7 +19,7 @@ namespace TarkovPerformanceSuite
     {
         public const string PluginGuid = "com.lucaswilluweit.tarkovperformancesuite";
         public const string PluginName = "Tarkov Performance Suite";
-        public const string PluginVersion = "0.1.1";
+        public const string PluginVersion = "0.2.0";
 
         private PluginConfiguration _configuration;
         private RuntimeInformation _runtime;
@@ -32,6 +32,7 @@ namespace TarkovPerformanceSuite
         private BenchmarkRecorder _benchmark;
         private MethodTimingFramework _timing;
         private RemoteCharacterShadowFeature _shadows;
+        private RemoteAiOffscreenSkinningFeature _skinning;
         private EntityCounts _counts;
         private double _suiteAverageMs;
         private string _outputRoot;
@@ -46,6 +47,7 @@ namespace TarkovPerformanceSuite
             _benchmark = new BenchmarkRecorder(Logger);
             _timing = new MethodTimingFramework(Logger);
             _shadows = new RemoteCharacterShadowFeature(Logger, _configuration, _entities, _exceptions);
+            _skinning = new RemoteAiOffscreenSkinningFeature(Logger, _configuration, _entities, _exceptions);
             _outputRoot = Path.Combine(BepInEx.Paths.PluginPath, "TarkovPerformanceSuite");
             _lifecycle.RaidStarted += OnRaidStarted;
             _lifecycle.RaidEnded += OnRaidEnded;
@@ -53,6 +55,7 @@ namespace TarkovPerformanceSuite
             Logger.LogInfo($"{PluginName} {PluginVersion} loaded. All optimization experiments default to disabled.");
             _runtime.Log(Logger);
             _shadows.Initialize();
+            _skinning.Initialize();
         }
 
         private void Update()
@@ -66,6 +69,7 @@ namespace TarkovPerformanceSuite
                 {
                     _timing.SetRuntimeEnabled(false);
                     _shadows.SetEnabled(false);
+                    _skinning.SetEnabled(false);
                     return;
                 }
                 float now = Time.realtimeSinceStartup;
@@ -80,21 +84,26 @@ namespace TarkovPerformanceSuite
                 if (_configuration.DiagnosticReportKey.Value.IsDown()) ExportDiagnosticReport();
                 if (_configuration.ShadowEnabled.Value != _shadows.IsEnabled) _shadows.SetEnabled(_configuration.ShadowEnabled.Value);
                 if (_configuration.ShadowToggleKey.Value.IsDown()) _shadows.SetEnabled(!_shadows.IsEnabled);
+                if (_configuration.SkinningEnabled.Value != _skinning.IsEnabled) _skinning.SetEnabled(_configuration.SkinningEnabled.Value);
+                if (_configuration.SkinningToggleKey.Value.IsDown()) _skinning.SetEnabled(!_skinning.IsEnabled);
                 if (_lifecycle.State != RaidState.Started) return;
 
                 _timing.Initialize(_configuration.MethodTimingEnabled.Value);
-                _timing.SetRuntimeEnabled(_configuration.MethodTimingEnabled.Value);
+                _timing.SetRuntimeEnabled(_configuration.MethodTimingEnabled.Value && (!_configuration.MethodTimingCaptureOnly.Value || _benchmark.IsCapturing));
 
+                double frameMs = Time.unscaledDeltaTime * 1000.0;
                 _entities.Tick(now);
                 _fika.Tick(now);
+                _shadows.ObserveFrame(frameMs / 1000.0, _metrics.PreferredTimeMs("CPU Main Thread Frame Time", "PlayerLoop") ?? frameMs);
                 _shadows.Tick(now);
-                double frameMs = Time.unscaledDeltaTime * 1000.0;
+                _skinning.Tick(now);
                 bool capturePressed = _configuration.CaptureKey.Value.IsDown() && !_benchmark.IsCapturing;
 
                 if (capturePressed)
                 {
                     double duration = _configuration.Validated.CaptureSeconds;
                     _timing.ResetAggregates(now);
+                    _timing.SetRuntimeEnabled(_configuration.MethodTimingEnabled.Value);
                     _benchmark.Start(now, duration, ReadMapName(_lifecycle.World), FeatureState(), Path.Combine(_outputRoot, "benchmarks"), _configuration.ExportCsv.Value);
                 }
 
@@ -103,13 +112,13 @@ namespace TarkovPerformanceSuite
                     _counts = _entities.CountNow(now);
                     if (_overlay.Visible) _overlay.AddFrame(frameMs);
                 }
-                bool captureCompleted = _benchmark.IsCapturing && _benchmark.Record(now, frameMs, _metrics, _counts, _fika.ServerFps);
+                bool captureCompleted = _benchmark.IsCapturing && _benchmark.Record(now, frameMs, _metrics, _counts, _shadows.Counters, _skinning.Counters, _fika.ServerFps);
                 if (captureCompleted) ExportDiagnosticReport();
                 _overlay.SuiteAverageMs = _suiteAverageMs;
                 if (_overlay.NeedsRefresh(now))
                 {
                     string methodText = _timing.GetOverlayText(now);
-                    _overlay.Refresh(now, _counts, _metrics, _fika, _benchmark, _lifecycle.State.ToString(), ShadowStatus(), methodText);
+                    _overlay.Refresh(now, _counts, _metrics, _fika, _benchmark, _lifecycle.State.ToString(), ExperimentStatus(), methodText);
                 }
             }
             catch (Exception ex)
@@ -143,6 +152,7 @@ namespace TarkovPerformanceSuite
             _fika.Clear();
             _timing?.Shutdown();
             _shadows?.Shutdown();
+            _skinning?.Shutdown();
             Logger.LogInfo(PluginName + " shut down and released diagnostic resources.");
         }
 
@@ -153,6 +163,7 @@ namespace TarkovPerformanceSuite
             _fika.Clear();
             _timing.Initialize(_configuration.MethodTimingEnabled.Value);
             _shadows.OnRaidStarted();
+            _skinning.OnRaidStarted();
             _overlay.Reset();
             _overlay.Visible = _configuration.OverlayEnabled.Value;
             try
@@ -168,6 +179,7 @@ namespace TarkovPerformanceSuite
         private void OnRaidEnded(GameWorld world)
         {
             _shadows.OnRaidEnded();
+            _skinning.OnRaidEnded();
             _benchmark.Finish(true);
             _metrics.Dispose();
             _entities.Clear();
@@ -182,7 +194,7 @@ namespace TarkovPerformanceSuite
             {
                 string benchmarkConfiguration = "durationSeconds=" + _configuration.Validated.CaptureSeconds + ";exportCsv=" + _configuration.ExportCsv.Value;
                 string methodSnapshot = _timing.GetDiagnosticSnapshot(Time.realtimeSinceStartup);
-                string path = DiagnosticReport.Write(Path.Combine(_outputRoot, "diagnostics"), _runtime, _metrics, _counts, _exceptions, FeatureState() + ";" + ShadowStatus(), benchmarkConfiguration, _timing.PatchReport, methodSnapshot, _suiteAverageMs);
+                string path = DiagnosticReport.Write(Path.Combine(_outputRoot, "diagnostics"), _runtime, _metrics, _counts, _exceptions, FeatureState() + ";" + ExperimentStatus(), benchmarkConfiguration, _timing.PatchReport, methodSnapshot, _suiteAverageMs);
                 Logger.LogInfo("Diagnostic report exported: " + path);
             }
             catch (Exception ex)
@@ -192,13 +204,27 @@ namespace TarkovPerformanceSuite
             }
         }
 
-        private string FeatureState() => "RemoteCharacterShadowLOD=" + (_shadows != null && _shadows.IsEnabled ? "enabled" : "disabled") + ";DryRun=" + _configuration.ShadowDryRun.Value;
+        private string FeatureState()
+        {
+            return "RemoteCharacterShadowLOD=" + (_shadows != null && _shadows.IsEnabled ? "enabled" : "disabled")
+                + ";ShadowDryRun=" + _configuration.ShadowDryRun.Value
+                + ";OffscreenSkinning=" + (_skinning != null && _skinning.IsEnabled ? "enabled" : "disabled")
+                + ";SkinningDryRun=" + _configuration.SkinningDryRun.Value;
+        }
 
         private string ShadowStatus()
         {
             ShadowFeatureCounters counters = _shadows.Counters;
-            return _shadows.StatusText + " | AI " + counters.RegisteredAi + " beyond " + counters.BeyondThreshold + " renderers " + counters.TrackedRenderers + " disabled " + counters.DisabledRenderers + " cost " + counters.AverageMs.ToString("F3") + " ms";
+            return _shadows.StatusText + " | effective " + counters.EffectiveDistance.ToString("F0") + " m | AI " + counters.RegisteredAi + " beyond " + counters.BeyondThreshold + " renderers " + counters.TrackedRenderers + " disabled " + counters.DisabledRenderers + " cost " + counters.AverageMs.ToString("F3") + " ms";
         }
+
+        private string SkinningStatus()
+        {
+            SkinningFeatureCounters counters = _skinning.Counters;
+            return _skinning.StatusText + " | AI " + counters.RegisteredAi + " offscreen " + counters.OffscreenAi + " candidates " + counters.CandidateRenderers + " changed " + counters.ModifiedRenderers + " cost " + counters.AverageMs.ToString("F3") + " ms";
+        }
+
+        private string ExperimentStatus() => "Shadows: " + ShadowStatus() + "\nOffscreen skinning: " + SkinningStatus();
 
         private static string ReadMapName(GameWorld world)
         {

@@ -73,7 +73,7 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         private static int _patchFailures;
         private static volatile bool _circuitOpen;
 
-        private readonly List<MethodTimingTarget> _targets = new List<MethodTimingTarget>(8);
+        private readonly List<MethodTimingTarget> _targets = new List<MethodTimingTarget>(24);
         private readonly StringBuilder _overlayBuilder = new StringBuilder(1024);
         private readonly StringBuilder _reportBuilder = new StringBuilder(4096);
         private readonly MethodTimingTarget[] _sortBuffer = new MethodTimingTarget[32];
@@ -116,6 +116,8 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             AddTarget(typeof(Player), "BodyUpdate", typeof(void), new[] { typeof(float), typeof(int) }, "EFT.Player.BodyUpdate");
             AddTarget(typeof(Player), "ManualUpdate", typeof(void), new[] { typeof(float), typeof(float?), typeof(int) }, "EFT.Player.ManualUpdate");
             AddTarget(typeof(Player), "FBBIKUpdate", typeof(void), new[] { typeof(float) }, "EFT.Player.FBBIKUpdate");
+            AddTarget(typeof(Player), "PropUpdate", typeof(void), Type.EmptyTypes, "EFT.Player.PropUpdate");
+            AddTarget(typeof(BasePhysicalClass), "LateUpdate", typeof(void), Type.EmptyTypes, "EFT.BasePhysicalClass.LateUpdate");
             AddOptionalFikaTargets();
             _active = _targets.Count > 0;
             _patchReport = _reportBuilder.ToString();
@@ -224,6 +226,10 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             Type fikaPlayer = fika.GetType("Fika.Core.Main.Players.FikaPlayer", false);
             AddTarget(client, "Update", typeof(void), Type.EmptyTypes, "FikaClient.Update");
             AddTarget(observed, "ManualStateUpdate", typeof(void), new[] { typeof(double) }, "ObservedPlayer.ManualStateUpdate");
+            AddTarget(observed, "LateUpdate", typeof(void), Type.EmptyTypes, "ObservedPlayer.LateUpdate");
+            AddTarget(observed, "ManualUpdate", typeof(void), new[] { typeof(float), typeof(float?), typeof(int) }, "ObservedPlayer.ManualUpdate");
+            AddTarget(observed, "ObservedVisualPass", typeof(void), new[] { typeof(float), typeof(int) }, "ObservedPlayer.ObservedVisualPass");
+            AddTarget(observed, "ObservedFBBIKUpdate", typeof(void), new[] { typeof(float), typeof(int) }, "ObservedPlayer.ObservedFBBIKUpdate");
             AddTarget(fikaPlayer, "ManualUpdate", typeof(void), new[] { typeof(float), typeof(float?), typeof(int) }, "FikaPlayer.ManualUpdate");
         }
 

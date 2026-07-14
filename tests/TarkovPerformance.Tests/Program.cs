@@ -19,6 +19,7 @@ namespace TarkovPerformanceSuite.Tests
             Run("benchmark CSV and JSON serialization", TestSerialization);
             Run("entity classification", TestEntityClassification);
             Run("configuration validation", TestConfiguration);
+            Run("adaptive distance hysteresis", TestAdaptiveDistance);
             Run("circuit breaker", TestCircuitBreaker);
             Run("time scheduler", TestScheduler);
             Run("original-state restore", TestStateCache);
@@ -48,16 +49,18 @@ namespace TarkovPerformanceSuite.Tests
                 StartedUtc = "2026-01-01T00:00:00Z",
                 MapName = "factory4_day",
                 EnabledFeatures = "shadow=false",
-                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1 } }
+                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1, ShadowEffectiveDistance = 75, ShadowDisabledRendererCount = 20, SkinningModifiedRendererCount = 4 } }
             };
             var csv = new StringWriter(); BenchmarkSerializer.WriteCsv(csv, export);
             var json = new StringWriter(); BenchmarkSerializer.WriteJson(json, export);
             True(csv.ToString().Contains("frame_time_ms"));
             True(csv.ToString().Contains("gpu_frame_ms"));
+            True(csv.ToString().Contains("shadow_effective_distance"));
             True(csv.ToString().Contains("shadow=false"));
             True(json.ToString().Contains("factory4_day"));
             True(json.ToString().Contains("\"frameTimeMs\":10"));
             True(json.ToString().Contains("\"gpuFrameMs\":4"));
+            True(json.ToString().Contains("\"shadowEffectiveDistance\":75"));
         }
 
         private static void TestEntityClassification()
@@ -71,8 +74,24 @@ namespace TarkovPerformanceSuite.Tests
 
         private static void TestConfiguration()
         {
-            ValidatedConfiguration value = ConfigurationValidator.Validate(1, 5000, 0.01);
+            ValidatedConfiguration value = ConfigurationValidator.Validate(1, 5000, 0.01, 5000, 500, 1, 0.001, 50);
             Near(5, value.CaptureSeconds); Near(1000, value.ShadowDistance); Near(0.1, value.UpdateIntervalSeconds);
+            Near(1000, value.ShadowMinimumDistance); Near(240, value.ShadowTargetFps);
+            Near(20, value.SkinningDistance); Near(0.05, value.SkinningUpdateIntervalSeconds); Near(10, value.SkinningOffscreenHoldSeconds);
+        }
+
+        private static void TestAdaptiveDistance()
+        {
+            var controller = new AdaptiveDistanceController();
+            controller.Reset(120);
+            controller.Update(1.0 / 60.0, 100, 120, 60, 60);
+            for (int i = 0; i < 120; i++) controller.Update(1.0 / 60.0, 12, 120, 60, 60);
+            Near(120, controller.EffectiveDistance);
+            for (int i = 0; i < 240; i++) controller.Update(1.0 / 60.0, 25, 120, 60, 60);
+            True(controller.EffectiveDistance < 120);
+            True(controller.EffectiveDistance >= 60);
+            for (int i = 0; i < 3600; i++) controller.Update(1.0 / 120.0, 8, 120, 60, 60);
+            Near(120, controller.EffectiveDistance);
         }
 
         private static void TestCircuitBreaker()

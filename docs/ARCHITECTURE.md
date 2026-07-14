@@ -10,7 +10,7 @@ TarkovPerformanceSuite/
 |       |-- Configuration/
 |       |-- Core/                        lifecycle and runtime information
 |       |-- Diagnostics/                 overlay, recorders, Harmony timing
-|       |-- Features/                    entity registry and shadow experiment
+|       |-- Features/                    entity registry and reversible renderer experiments
 |       `-- FikaAdapter/                 cached reflection; no Fika reference
 |-- tests/TarkovPerformance.Tests/       dependency-free automated runner
 |-- scripts/                             discovery, build, deploy, rollback
@@ -22,7 +22,6 @@ TarkovPerformanceSuite/
 `-- TarkovPerformanceSuite.sln
 ```
 
-`TarkovPerformance.Core.dll` and `TarkovPerformanceSuite.dll` are deployed together. No prepatcher exists in 0.1.0.
+`TarkovPerformance.Core.dll` and `TarkovPerformanceSuite.dll` are deployed together. No prepatcher exists in 0.2.0.
 
 Main-thread boundaries are explicit: Unity/EFT objects are read or changed only from the plugin's Unity callbacks. Only immutable benchmark sample arrays are passed to a worker for file serialization.
-
