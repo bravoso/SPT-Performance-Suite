@@ -22,6 +22,7 @@ namespace TarkovPerformanceSuite.Tests
             Run("adaptive distance hysteresis", TestAdaptiveDistance);
             Run("circuit breaker", TestCircuitBreaker);
             Run("time scheduler", TestScheduler);
+            Run("stable frame work budget", TestFrameWorkBudget);
             Run("original-state restore", TestStateCache);
             Run("version comparison", TestVersions);
             Run("method signature fingerprint", TestFingerprint);
@@ -49,7 +50,7 @@ namespace TarkovPerformanceSuite.Tests
                 StartedUtc = "2026-01-01T00:00:00Z",
                 MapName = "factory4_day",
                 EnabledFeatures = "shadow=false",
-                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1, ShadowEffectiveDistance = 75, ShadowDisabledRendererCount = 20, SkinningModifiedRendererCount = 4, RemoteLodFarAiCount = 3, RemoteLodForcedGroupCount = 8, DeclutterHiddenRendererCount = 120 } }
+                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1, ShadowEffectiveDistance = 75, ShadowDisabledRendererCount = 20, SkinningModifiedRendererCount = 4, RemoteLodFarAiCount = 3, RemoteLodForcedGroupCount = 8, DeclutterHiddenRendererCount = 120, RemoteBudgetedCharacterCount = 6, RemoteSkippedPropUpdates = 42, CompatibilityFastWorldLookups = 8 } }
             };
             var csv = new StringWriter(); BenchmarkSerializer.WriteCsv(csv, export);
             var json = new StringWriter(); BenchmarkSerializer.WriteJson(json, export);
@@ -65,6 +66,9 @@ namespace TarkovPerformanceSuite.Tests
             True(json.ToString().Contains("\"shadowEffectiveDistance\":75"));
             True(json.ToString().Contains("\"remoteLodForcedGroupCount\":8"));
             True(json.ToString().Contains("\"declutterHiddenRendererCount\":120"));
+            True(json.ToString().Contains("\"remoteBudgetedCharacterCount\":6"));
+            True(json.ToString().Contains("\"remoteSkippedPropUpdates\":42"));
+            True(json.ToString().Contains("\"compatibilityFastWorldLookups\":8"));
         }
 
         private static void TestEntityClassification()
@@ -109,6 +113,14 @@ namespace TarkovPerformanceSuite.Tests
         {
             var scheduler = new TimeScheduler(0.25);
             True(scheduler.IsDue(0)); True(!scheduler.IsDue(0.1)); True(scheduler.IsDue(0.25));
+        }
+
+        private static void TestFrameWorkBudget()
+        {
+            int runs = 0;
+            for (int frame = 0; frame < 16; frame++) if (FrameWorkBudget.ShouldRun(frame, 7, 4)) runs++;
+            Equal(4, runs);
+            True(FrameWorkBudget.ShouldRun(3, 9, 1));
         }
 
         private static void TestStateCache()

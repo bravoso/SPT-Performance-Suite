@@ -51,7 +51,8 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         }
 
         internal bool Record(double now, double frameTimeMs, ProfilerMetrics metrics, EntityCounts counts, ShadowFeatureCounters shadows,
-            SkinningFeatureCounters skinning, RemoteRenderLodCounters renderLod, DeclutterCounters declutter, int? fikaServerFps)
+            SkinningFeatureCounters skinning, RemoteRenderLodCounters renderLod, DeclutterCounters declutter,
+            RemoteUpdateBudgetCounters remoteBudget, long compatibilityFastWorldLookups, int? fikaServerFps)
         {
             if (!IsCapturing) return false;
             ElapsedSeconds = now - _startedRealtime;
@@ -90,6 +91,11 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                     RemoteLodForcedGroupCount = renderLod.ForcedLodGroups,
                     RemoteLodModifiedRendererCount = renderLod.ModifiedRenderers,
                     DeclutterHiddenRendererCount = declutter.Hidden,
+                    RemoteBudgetedCharacterCount = remoteBudget.BudgetedCharacters,
+                    RemoteCulledAnimatorCount = remoteBudget.CulledAnimators,
+                    RemoteSkippedPropUpdates = remoteBudget.SkippedPropUpdates,
+                    RemoteSkippedTriggerSearches = remoteBudget.SkippedTriggerSearches,
+                    CompatibilityFastWorldLookups = compatibilityFastWorldLookups,
                     FikaServerFps = fikaServerFps
                 };
                 _sumFps += fps;

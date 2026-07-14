@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 - 2026-07-14
+
+- Add a friend-ready `OldCpuAggressive` preset in the F12 Configuration Manager. It deliberately leaves global LOD, remote LOD forcing, and texture mip quality disabled.
+- Remove the verified repeating full-scene `GameWorld` search in SPT Detailed Bot Counter 1.7 while preserving its counts and UI. The Reserve/Customs captures showed a matching 118-140 ms hitch roughly every 15 seconds.
+- Add a remote-character CPU budget that reuses EFT/Fika's existing culling result. Confirmed hidden remote characters use complete animator culling and lower-frequency prop/trigger-search presentation work; visible characters and all gameplay/network state remain full-rate.
+- Add CPU frame-pacing controls for low-priority background loading, bounded async upload work, a persistent upload buffer, and reusable Unity physics collision callbacks.
+- Add a shared 20 Hz entity relevance snapshot and reuse component buffers to remove duplicate distance/visibility/health checks and periodic registry allocations.
+- Add a compact overlay with current FPS, rolling 1% low, CPU main/render milliseconds, GPU milliseconds, bottleneck label, AI visibility, server FPS, and suite cost. Detailed mode remains available.
+- Record remote-budget activity and compatibility-cache lookups in benchmark CSV/JSON exports.
+- Add a self-contained Old CPU ZIP packaging workflow and plain-language installation guide.
+
 ## 0.3.0 - 2026-07-14
 
 - Add an opt-in aggressive Unity render profile: earlier global LOD selection, fixed pre-raid texture mip limit, shorter shadows, two-bone skinning, reduced pixel lights, disabled realtime probes/soft particles, and a smaller particle-raycast budget.

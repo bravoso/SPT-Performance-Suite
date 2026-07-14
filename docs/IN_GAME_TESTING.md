@@ -5,7 +5,7 @@ These steps are pending because `SPT_TEST_ROOT` was not found.
 1. Make a separate disposable copy of the SPT installation; do not use the primary/reference folder.
 2. Set `SPT_REFERENCE_ROOT` to the read-only reference and `SPT_TEST_ROOT` to the disposable copy.
 3. Run `scripts/deploy-test.ps1`.
-4. Start the disposable server/client and confirm the log shows `Tarkov Performance Suite 0.2.0 loaded` and the detected versions.
+4. Start the disposable server/client and confirm the log shows `Tarkov Performance Suite 0.4.0 loaded` and the detected versions.
 5. Confirm `BepInEx/config/com.lucaswilluweit.tarkovperformancesuite.cfg` exists and both behavior-changing experiments are `false`.
 6. Enter a raid. Confirm one raid-start log, gradual entity counts, Num7 overlay toggle, and unavailable counters displaying `n/a` without errors.
 7. Press Num8, wait for completion, and verify matching CSV/JSON files plus the automatically generated timing report.

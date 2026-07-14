@@ -147,18 +147,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         private void ProcessEntities()
         {
-            bool haveLocal = false;
-            Vector3 localPosition = default;
-            foreach (TrackedEntity entity in _registry.Entities)
-            {
-                if (entity.Kind == EntityKind.LocalPlayer && entity.Player != null)
-                {
-                    localPosition = entity.Player.Transform.position;
-                    haveLocal = true;
-                    break;
-                }
-            }
-            if (!haveLocal) return;
+            if (!_registry.TryGetLocalPosition(out _)) return;
 
             ValidatedConfiguration configuration = _configuration.Validated;
             float distance = (float)(_configuration.ShadowAdaptiveEnabled.Value ? _adaptiveDistance.EffectiveDistance : configuration.ShadowDistance);
@@ -171,8 +160,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             {
                 if (entity.Kind != EntityKind.RemoteAI || entity.Player == null) continue;
                 ai++;
-                Vector3 delta = entity.Player.Transform.position - localPosition;
-                bool isBeyond = delta.sqrMagnitude > distanceSquared;
+                bool isBeyond = entity.DistanceSquared > distanceSquared;
                 if (isBeyond) beyond++;
                 Renderer[] renderers = entity.Renderers;
                 for (int i = 0; i < renderers.Length; i++)

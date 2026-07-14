@@ -13,10 +13,17 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         internal EntityKind Kind;
         internal int SeenGeneration;
         internal float NextComponentRefresh;
+        internal bool IsAlive;
+        internal bool IsVisible;
+        internal float DistanceSquared;
         internal Animator[] Animators = Array.Empty<Animator>();
         internal Renderer[] Renderers = Array.Empty<Renderer>();
         internal SkinnedMeshRenderer[] SkinnedRenderers = Array.Empty<SkinnedMeshRenderer>();
         internal LODGroup[] LodGroups = Array.Empty<LODGroup>();
+        internal readonly List<Animator> AnimatorBuffer = new List<Animator>(8);
+        internal readonly List<Renderer> RendererBuffer = new List<Renderer>(32);
+        internal readonly List<SkinnedMeshRenderer> SkinnedBuffer = new List<SkinnedMeshRenderer>(24);
+        internal readonly List<LODGroup> LodBuffer = new List<LODGroup>(8);
     }
 
     internal readonly struct EntityCounts
@@ -46,8 +53,11 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private int _cursor;
         private float _nextCycle;
         private float _nextCountRefresh;
+        private float _nextSnapshotRefresh;
         private EntityCounts _cachedCounts;
         private GameWorld _world;
+        private bool _haveLocalPosition;
+        private Vector3 _localPosition;
 
         internal IEnumerable<TrackedEntity> Entities => _entities.Values;
         internal int Count => _entities.Count;
@@ -62,23 +72,35 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         internal void Tick(float now)
         {
             if (_world == null || _world.RegisteredPlayers == null) return;
-            if (_cursor == 0 && now < _nextCycle) return;
-            if (_cursor == 0) _generation++;
-
-            int processed = 0;
-            while (_cursor < _world.RegisteredPlayers.Count && processed < 4)
+            if (_cursor != 0 || now >= _nextCycle)
             {
-                if (_world.RegisteredPlayers[_cursor] is Player player && player != null) RegisterOrRefresh(player, now);
-                _cursor++;
-                processed++;
-            }
+                if (_cursor == 0) _generation++;
+                int processed = 0;
+                while (_cursor < _world.RegisteredPlayers.Count && processed < 4)
+                {
+                    if (_world.RegisteredPlayers[_cursor] is Player player && player != null) RegisterOrRefresh(player, now);
+                    _cursor++;
+                    processed++;
+                }
 
-            if (_cursor >= _world.RegisteredPlayers.Count)
-            {
-                RemoveUnseen();
-                _cursor = 0;
-                _nextCycle = now + 1f;
+                if (_cursor >= _world.RegisteredPlayers.Count)
+                {
+                    RemoveUnseen();
+                    _cursor = 0;
+                    _nextCycle = now + 1f;
+                }
             }
+            if (now >= _nextSnapshotRefresh)
+            {
+                _nextSnapshotRefresh = now + 0.05f;
+                RefreshSnapshots();
+            }
+        }
+
+        internal bool TryGetLocalPosition(out Vector3 position)
+        {
+            position = _localPosition;
+            return _haveLocalPosition;
         }
 
         internal EntityCounts CountNow(float now)
@@ -96,16 +118,14 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 else if (entity.Kind == EntityKind.RemoteAI)
                 {
                     ai++;
-                    if (player.HealthController != null && player.HealthController.IsAlive) livingAi++;
-                    bool visible = false;
+                    if (entity.IsAlive) livingAi++;
                     for (int i = 0; i < entity.Renderers.Length; i++)
                     {
                         Renderer renderer = entity.Renderers[i];
                         if (renderer == null) continue;
-                        if (renderer.isVisible) visible = true;
                         if (renderer.enabled && renderer.gameObject.activeInHierarchy && renderer.shadowCastingMode != UnityEngine.Rendering.ShadowCastingMode.Off) shadows++;
                     }
-                    if (visible) visibleAi++;
+                    if (entity.IsVisible) visibleAi++;
                 }
                 for (int i = 0; i < entity.Animators.Length; i++) if (entity.Animators[i] != null && entity.Animators[i].isActiveAndEnabled) animators++;
                 for (int i = 0; i < entity.SkinnedRenderers.Length; i++) if (entity.SkinnedRenderers[i] != null && entity.SkinnedRenderers[i].enabled && entity.SkinnedRenderers[i].gameObject.activeInHierarchy) skinned++;
@@ -123,6 +143,9 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             _cursor = 0;
             _generation = 0;
             _nextCountRefresh = 0;
+            _nextSnapshotRefresh = 0;
+            _haveLocalPosition = false;
+            _localPosition = default;
             _cachedCounts = default;
         }
 
@@ -138,12 +161,64 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             if (now >= entity.NextComponentRefresh)
             {
                 Transform root = player.PlayerBody != null ? player.PlayerBody.transform : player.gameObject.transform;
-                entity.Animators = root.GetComponentsInChildren<Animator>(true);
-                entity.Renderers = root.GetComponentsInChildren<Renderer>(true);
-                entity.SkinnedRenderers = root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
-                entity.LodGroups = root.GetComponentsInChildren<LODGroup>(true);
-                entity.NextComponentRefresh = now + 10f;
+                entity.AnimatorBuffer.Clear();
+                entity.RendererBuffer.Clear();
+                entity.SkinnedBuffer.Clear();
+                entity.LodBuffer.Clear();
+                root.GetComponentsInChildren(true, entity.AnimatorBuffer);
+                root.GetComponentsInChildren(true, entity.RendererBuffer);
+                root.GetComponentsInChildren(true, entity.LodBuffer);
+                for (int i = 0; i < entity.RendererBuffer.Count; i++)
+                    if (entity.RendererBuffer[i] is SkinnedMeshRenderer skinned) entity.SkinnedBuffer.Add(skinned);
+                entity.Animators = CopyToStableArray(entity.AnimatorBuffer, entity.Animators);
+                entity.Renderers = CopyToStableArray(entity.RendererBuffer, entity.Renderers);
+                entity.SkinnedRenderers = CopyToStableArray(entity.SkinnedBuffer, entity.SkinnedRenderers);
+                entity.LodGroups = CopyToStableArray(entity.LodBuffer, entity.LodGroups);
+                entity.NextComponentRefresh = now + 12f + ((id & int.MaxValue) % 7) * 0.37f;
             }
+        }
+
+        private void RefreshSnapshots()
+        {
+            _haveLocalPosition = false;
+            foreach (TrackedEntity entity in _entities.Values)
+            {
+                if (entity.Kind == EntityKind.LocalPlayer && entity.Player != null)
+                {
+                    _localPosition = entity.Player.Transform.position;
+                    _haveLocalPosition = true;
+                    break;
+                }
+            }
+
+            foreach (TrackedEntity entity in _entities.Values)
+            {
+                Player player = entity.Player;
+                if (player == null) continue;
+                entity.IsAlive = player.HealthController != null && player.HealthController.IsAlive;
+                entity.DistanceSquared = _haveLocalPosition ? (player.Transform.position - _localPosition).sqrMagnitude : 0f;
+                bool visible = player.IsYourPlayer || player.IsVisible;
+                if (!visible)
+                {
+                    for (int i = 0; i < entity.Renderers.Length; i++)
+                    {
+                        Renderer renderer = entity.Renderers[i];
+                        if (renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy && renderer.isVisible)
+                        {
+                            visible = true;
+                            break;
+                        }
+                    }
+                }
+                entity.IsVisible = visible;
+            }
+        }
+
+        private static T[] CopyToStableArray<T>(List<T> source, T[] destination)
+        {
+            if (destination == null || destination.Length != source.Count) destination = new T[source.Count];
+            source.CopyTo(destination, 0);
+            return destination;
         }
 
         private void RemoveUnseen()

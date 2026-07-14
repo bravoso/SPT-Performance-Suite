@@ -1,6 +1,6 @@
 # Roadmap
 
-Version 0.2.0 implements only adaptive remote-AI shadow distance and a disabled-by-default offscreen skinned-mesh isolation experiment. It does not throttle observed-player update methods, packets, AI authority, combat, physics, or animation controllers.
+Version 0.4.0 implements the central relevance cache and a conservative hidden-remote presentation budget. It never throttles packets, root snapshot application, AI authority, combat, ballistics, damage, inventory, or navigation. Hidden prop and trigger-search presentation is amortized and animator state is restored as soon as the existing culling signal reports visibility.
 
 ## Stage A - Isolation experiments
 

@@ -4,13 +4,28 @@ using UnityEngine;
 
 namespace TarkovPerformanceSuite.Configuration
 {
+    internal enum PerformancePreset
+    {
+        Custom,
+        Balanced,
+        OldCpuAggressive
+    }
+
+    internal enum OverlayMode
+    {
+        Compact,
+        Detailed
+    }
+
     internal sealed class PluginConfiguration
     {
         internal PluginConfiguration(ConfigFile config)
         {
+            Preset = config.Bind("Quick Setup", "PerformancePreset", PerformancePreset.Custom, "One-click setup. OldCpuAggressive targets 4-core/8-thread CPUs without changing LOD or texture quality. Choose Custom to control every switch yourself.");
             Enabled = config.Bind("General", "Enabled", true, "Master switch for the suite.");
             VerboseLogging = config.Bind("General", "VerboseLogging", false, "Log additional lifecycle details; never logs per frame.");
             OverlayEnabled = config.Bind("Diagnostics", "OverlayEnabled", true, "Show the in-raid diagnostics overlay.");
+            OverlayDisplayMode = config.Bind("Diagnostics", "OverlayMode", Configuration.OverlayMode.Compact, "Compact is friend-friendly; Detailed shows all profiler counters and experiment status.");
             OverlayKey = config.Bind("Diagnostics", "OverlayKey", new KeyboardShortcut(KeyCode.Keypad7), "Toggle the diagnostics overlay. Also editable in the F12 Configuration Manager.");
             CaptureKey = config.Bind("Diagnostics", "CaptureKey", new KeyboardShortcut(KeyCode.Keypad8), "Start a benchmark capture. Also editable in the F12 Configuration Manager.");
             DiagnosticReportKey = config.Bind("Diagnostics", "DiagnosticReportKey", new KeyboardShortcut(KeyCode.Keypad9), "Export a diagnostic report with current profiler and method timings.");
@@ -47,11 +62,26 @@ namespace TarkovPerformanceSuite.Configuration
             CosmeticDeclutterEnabled = config.Bind("Aggressive", "CosmeticDeclutterEnabled", false, "Incrementally hide small renderer-only cosmetic clutter selected by a conservative name and size filter.");
             CosmeticDeclutterDryRun = config.Bind("Aggressive", "CosmeticDeclutterDryRun", false, "Count cosmetic clutter candidates without hiding them.");
             CosmeticDeclutterBatchSize = config.Bind("Aggressive", "CosmeticDeclutterBatchSize", 200, "Renderers classified per frame after raid start, clamped to 25-1000.");
+            RemoteUpdateBudgetEnabled = config.Bind("CPU - Remote Characters", "Enabled", false, "Use EFT/Fika's existing visibility result to reduce presentation-only work for hidden remote characters.");
+            RemoteUpdateBudgetDistance = config.Bind("CPU - Remote Characters", "MinimumDistance", 40f, "Never budget a hidden remote character closer than this distance, clamped to 20-200 metres.");
+            RemoteUpdateBudgetHold = config.Bind("CPU - Remote Characters", "HiddenHoldSeconds", 0.2f, "How long a character must remain hidden before budgeting it, clamped to 0.05-2 seconds.");
+            RemoteUpdateBudgetInterval = config.Bind("CPU - Remote Characters", "ScanIntervalSeconds", 0.05f, "Visibility cache refresh interval, clamped to 0.033-0.5 seconds.");
+            RemoteUpdateBudgetDivisor = config.Bind("CPU - Remote Characters", "HiddenUpdateDivisor", 4, "Hidden prop and trigger-search work runs once per this many eligible calls, clamped to 2-8.");
+            RemoteAnimatorCullingEnabled = config.Bind("CPU - Remote Characters", "CullHiddenAnimators", true, "Use Unity CullCompletely for animators belonging to confirmed hidden remote characters; restored immediately when visible.");
+            FramePacingEnabled = config.Bind("CPU - Frame Pacing", "Enabled", false, "Limit background asset-upload pressure and enable allocation-saving physics callbacks. Does not enable mip streaming.");
+            BackgroundLoadingLowPriority = config.Bind("CPU - Frame Pacing", "LowPriorityBackgroundLoading", true, "Keep background loading threads from competing as aggressively with the main game thread.");
+            AsyncUploadTimeSlice = config.Bind("CPU - Frame Pacing", "AsyncUploadTimeSliceMs", 2, "Maximum main/render frame time spent on asynchronous uploads, clamped to 1-8 ms.");
+            AsyncUploadBufferMb = config.Bind("CPU - Frame Pacing", "AsyncUploadBufferMB", 32, "Persistent asynchronous upload buffer, clamped to 16-128 MiB.");
+            AsyncUploadPersistentBuffer = config.Bind("CPU - Frame Pacing", "PersistentUploadBuffer", true, "Reuse the upload buffer to avoid repeated allocation and release work.");
+            ReusePhysicsCollisionCallbacks = config.Bind("CPU - Frame Pacing", "ReusePhysicsCollisionCallbacks", true, "Reuse Unity collision callback objects to reduce managed allocations during physics-heavy combat.");
+            KnownModFixesEnabled = config.Bind("Compatibility", "FixKnownPeriodicScans", true, "Replace verified periodic full-scene searches in compatible installed mods with the suite's cached GameWorld reference.");
         }
 
+        internal ConfigEntry<PerformancePreset> Preset { get; }
         internal ConfigEntry<bool> Enabled { get; }
         internal ConfigEntry<bool> VerboseLogging { get; }
         internal ConfigEntry<bool> OverlayEnabled { get; }
+        internal ConfigEntry<OverlayMode> OverlayDisplayMode { get; }
         internal ConfigEntry<KeyboardShortcut> OverlayKey { get; }
         internal ConfigEntry<KeyboardShortcut> CaptureKey { get; }
         internal ConfigEntry<KeyboardShortcut> DiagnosticReportKey { get; }
@@ -88,6 +118,19 @@ namespace TarkovPerformanceSuite.Configuration
         internal ConfigEntry<bool> CosmeticDeclutterEnabled { get; }
         internal ConfigEntry<bool> CosmeticDeclutterDryRun { get; }
         internal ConfigEntry<int> CosmeticDeclutterBatchSize { get; }
+        internal ConfigEntry<bool> RemoteUpdateBudgetEnabled { get; }
+        internal ConfigEntry<float> RemoteUpdateBudgetDistance { get; }
+        internal ConfigEntry<float> RemoteUpdateBudgetHold { get; }
+        internal ConfigEntry<float> RemoteUpdateBudgetInterval { get; }
+        internal ConfigEntry<int> RemoteUpdateBudgetDivisor { get; }
+        internal ConfigEntry<bool> RemoteAnimatorCullingEnabled { get; }
+        internal ConfigEntry<bool> FramePacingEnabled { get; }
+        internal ConfigEntry<bool> BackgroundLoadingLowPriority { get; }
+        internal ConfigEntry<int> AsyncUploadTimeSlice { get; }
+        internal ConfigEntry<int> AsyncUploadBufferMb { get; }
+        internal ConfigEntry<bool> AsyncUploadPersistentBuffer { get; }
+        internal ConfigEntry<bool> ReusePhysicsCollisionCallbacks { get; }
+        internal ConfigEntry<bool> KnownModFixesEnabled { get; }
 
         internal ValidatedConfiguration Validated => ConfigurationValidator.Validate(
             CaptureDurationSeconds.Value,

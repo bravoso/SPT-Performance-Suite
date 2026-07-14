@@ -104,7 +104,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         private void ProcessEntities()
         {
-            if (!TryGetLocalPosition(out Vector3 localPosition)) return;
+            if (!_registry.TryGetLocalPosition(out _)) return;
             float near = Clamp(_configuration.RemoteAiRenderLodNearDistance.Value, 10f, 200f);
             float far = Clamp(_configuration.RemoteAiRenderLodFarDistance.Value, near, 500f);
             float nearSquared = near * near;
@@ -116,8 +116,8 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             {
                 if (entity.Kind != EntityKind.RemoteAI || entity.Player == null) continue;
                 ai++;
-                bool alive = entity.Player.HealthController != null && entity.Player.HealthController.IsAlive;
-                float distanceSquared = (entity.Player.Transform.position - localPosition).sqrMagnitude;
+                bool alive = entity.IsAlive;
+                float distanceSquared = entity.DistanceSquared;
                 if (!alive || distanceSquared < nearSquared)
                 {
                     RestoreEntity(entity);
@@ -169,16 +169,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             if (!DryRun) RestoreNoLongerTracked();
             _counters = new RemoteRenderLodCounters(ai, mid, farCount, DryRun ? candidateLods : _forcedLods.Count,
                 DryRun ? candidateSkinned : _skinnedStates.Count, DryRun ? candidateRenderers : _rendererStates.Count, _averageMs);
-        }
-
-        private bool TryGetLocalPosition(out Vector3 position)
-        {
-            foreach (TrackedEntity entity in _registry.Entities)
-            {
-                if (entity.Kind == EntityKind.LocalPlayer && entity.Player != null) { position = entity.Player.Transform.position; return true; }
-            }
-            position = default;
-            return false;
         }
 
         private void RestoreEntity(TrackedEntity entity)

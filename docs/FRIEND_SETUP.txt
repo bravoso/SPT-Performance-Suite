@@ -1,0 +1,13 @@
+TARKOV PERFORMANCE SUITE 0.4.0 - OLD CPU PROFILE
+
+1. Close SPT/Escape from Tarkov.
+2. Copy the BepInEx folder from this package into the SPT game folder.
+3. Start the game normally. The OldCpuAggressive preset is already selected.
+4. In raid, Num7 toggles the compact panel, Num8 records a 120-second benchmark, and Num9 writes a report.
+5. Press F12 and search for "Tarkov Performance Suite" to change the preset or any setting.
+
+This profile does not change AI decisions, damage, networking, bot count, navigation, LOD, or texture quality. It reduces presentation-only work for remote characters that EFT/Fika already reports as hidden, smooths background upload work, reuses physics callback objects, reduces distant character shadows, and enables conservative cosmetic decluttering.
+
+To uninstall, remove:
+BepInEx\plugins\TarkovPerformanceSuite
+BepInEx\config\com.lucaswilluweit.tarkovperformancesuite.cfg

@@ -19,7 +19,7 @@ namespace TarkovPerformanceSuite
     {
         public const string PluginGuid = "com.lucaswilluweit.tarkovperformancesuite";
         public const string PluginName = "Tarkov Performance Suite";
-        public const string PluginVersion = "0.3.0";
+        public const string PluginVersion = "0.4.0";
 
         private PluginConfiguration _configuration;
         private RuntimeInformation _runtime;
@@ -36,14 +36,19 @@ namespace TarkovPerformanceSuite
         private AggressiveQualityFeature _aggressiveQuality;
         private RemoteAiRenderLodFeature _renderLod;
         private CosmeticDeclutterFeature _declutter;
+        private RemoteUpdateBudgetFeature _remoteBudget;
+        private FramePacingFeature _framePacing;
+        private KnownModCompatibilityFeature _compatibility;
         private EntityCounts _counts;
         private double _suiteAverageMs;
         private string _outputRoot;
         private float _nextPluginErrorLog;
+        private PerformancePreset _lastPreset = (PerformancePreset)(-1);
 
         private void Awake()
         {
             _configuration = new PluginConfiguration(Config);
+            ApplyPresetIfChanged();
             _runtime = RuntimeInformation.Detect();
             _metrics = new ProfilerMetrics(Logger);
             _overlay = new DiagnosticsOverlay { Visible = _configuration.OverlayEnabled.Value };
@@ -54,6 +59,9 @@ namespace TarkovPerformanceSuite
             _aggressiveQuality = new AggressiveQualityFeature(Logger, _configuration, _exceptions);
             _renderLod = new RemoteAiRenderLodFeature(Logger, _configuration, _entities, _exceptions);
             _declutter = new CosmeticDeclutterFeature(Logger, _configuration, _exceptions);
+            _remoteBudget = new RemoteUpdateBudgetFeature(Logger, _configuration, _entities, _exceptions);
+            _framePacing = new FramePacingFeature(Logger, _configuration, _exceptions);
+            _compatibility = new KnownModCompatibilityFeature(Logger, _configuration, _exceptions);
             _outputRoot = Path.Combine(BepInEx.Paths.PluginPath, "TarkovPerformanceSuite");
             _lifecycle.RaidStarted += OnRaidStarted;
             _lifecycle.RaidEnded += OnRaidEnded;
@@ -65,6 +73,9 @@ namespace TarkovPerformanceSuite
             _aggressiveQuality.Initialize();
             _renderLod.Initialize();
             _declutter.Initialize();
+            _remoteBudget.Initialize();
+            _framePacing.Initialize();
+            _compatibility.Initialize();
         }
 
         private void Update()
@@ -74,6 +85,7 @@ namespace TarkovPerformanceSuite
             {
                 _benchmark.DrainCompletionLog();
                 _timing.FrameBoundary(Time.realtimeSinceStartup);
+                ApplyPresetIfChanged();
                 if (!_configuration.Enabled.Value)
                 {
                     _timing.SetRuntimeEnabled(false);
@@ -82,6 +94,9 @@ namespace TarkovPerformanceSuite
                     _aggressiveQuality.SetEnabled(false);
                     _renderLod.SetEnabled(false);
                     _declutter.SetEnabled(false);
+                    _remoteBudget.SetEnabled(false);
+                    _framePacing.SetEnabled(false);
+                    _compatibility.SetEnabled(false);
                     return;
                 }
                 float now = Time.realtimeSinceStartup;
@@ -101,6 +116,11 @@ namespace TarkovPerformanceSuite
                 if (_configuration.AggressiveModeEnabled.Value != _aggressiveQuality.IsEnabled) _aggressiveQuality.SetEnabled(_configuration.AggressiveModeEnabled.Value);
                 if (_configuration.RemoteAiRenderLodEnabled.Value != _renderLod.IsEnabled) _renderLod.SetEnabled(_configuration.RemoteAiRenderLodEnabled.Value);
                 if (_configuration.CosmeticDeclutterEnabled.Value != _declutter.IsEnabled) _declutter.SetEnabled(_configuration.CosmeticDeclutterEnabled.Value);
+                if (_configuration.RemoteUpdateBudgetEnabled.Value != _remoteBudget.IsEnabled) _remoteBudget.SetEnabled(_configuration.RemoteUpdateBudgetEnabled.Value);
+                if (_configuration.FramePacingEnabled.Value != _framePacing.IsEnabled) _framePacing.SetEnabled(_configuration.FramePacingEnabled.Value);
+                if (_configuration.KnownModFixesEnabled.Value != _compatibility.IsEnabled) _compatibility.SetEnabled(_configuration.KnownModFixesEnabled.Value);
+                _framePacing.Tick(now);
+                _compatibility.Tick(now);
                 if (_lifecycle.State != RaidState.Started) return;
 
                 _timing.Initialize(_configuration.MethodTimingEnabled.Value);
@@ -114,6 +134,7 @@ namespace TarkovPerformanceSuite
                 _skinning.Tick(now);
                 _renderLod.Tick(now);
                 _declutter.Tick();
+                _remoteBudget.Tick(now);
                 bool capturePressed = _configuration.CaptureKey.Value.IsDown() && !_benchmark.IsCapturing;
 
                 if (capturePressed)
@@ -130,12 +151,15 @@ namespace TarkovPerformanceSuite
                     if (_overlay.Visible) _overlay.AddFrame(frameMs);
                 }
                 bool captureCompleted = _benchmark.IsCapturing && _benchmark.Record(now, frameMs, _metrics, _counts, _shadows.Counters,
-                    _skinning.Counters, _renderLod.Counters, _declutter.Counters, _fika.ServerFps);
+                    _skinning.Counters, _renderLod.Counters, _declutter.Counters, _remoteBudget.Counters, _compatibility.FastLookups, _fika.ServerFps);
                 if (captureCompleted) ExportDiagnosticReport();
                 _overlay.SuiteAverageMs = _suiteAverageMs;
                 if (_overlay.NeedsRefresh(now))
                 {
                     string methodText = _timing.GetOverlayText(now);
+                    _overlay.DisplayMode = _configuration.OverlayDisplayMode.Value;
+                    _overlay.PresetName = _configuration.Preset.Value.ToString();
+                    _overlay.OptimizationSummary = "Remote CPU: " + RemoteBudgetStatus() + "\nFrame pacing: " + _framePacing.StatusText + "\nCompatibility: " + _compatibility.StatusText;
                     _overlay.Refresh(now, _counts, _metrics, _fika, _benchmark, _lifecycle.State.ToString(), ExperimentStatus(), methodText);
                 }
             }
@@ -174,6 +198,9 @@ namespace TarkovPerformanceSuite
             _aggressiveQuality?.Shutdown();
             _renderLod?.Shutdown();
             _declutter?.Shutdown();
+            _remoteBudget?.Shutdown();
+            _framePacing?.Shutdown();
+            _compatibility?.Shutdown();
             Logger.LogInfo(PluginName + " shut down and released diagnostic resources.");
         }
 
@@ -188,6 +215,10 @@ namespace TarkovPerformanceSuite
             _aggressiveQuality.OnRaidStarted();
             _renderLod.OnRaidStarted();
             _declutter.OnRaidStarted();
+            _remoteBudget.OnRaidStarted();
+            _framePacing.OnRaidStarted();
+            _compatibility.SetWorld(world);
+            _compatibility.OnRaidStarted();
             _overlay.Reset();
             _overlay.Visible = _configuration.OverlayEnabled.Value;
             try
@@ -207,6 +238,9 @@ namespace TarkovPerformanceSuite
             _aggressiveQuality.OnRaidEnded();
             _renderLod.OnRaidEnded();
             _declutter.OnRaidEnded();
+            _remoteBudget.OnRaidEnded();
+            _framePacing.OnRaidEnded();
+            _compatibility.OnRaidEnded();
             _benchmark.Finish(true);
             _metrics.Dispose();
             _entities.Clear();
@@ -239,7 +273,11 @@ namespace TarkovPerformanceSuite
                 + ";SkinningDryRun=" + _configuration.SkinningDryRun.Value
                 + ";AggressiveQuality=" + (_aggressiveQuality != null && _aggressiveQuality.IsEnabled ? "enabled" : "disabled")
                 + ";RemoteAiRenderLod=" + (_renderLod != null && _renderLod.IsEnabled ? "enabled" : "disabled")
-                + ";CosmeticDeclutter=" + (_declutter != null && _declutter.IsEnabled ? "enabled" : "disabled");
+                + ";CosmeticDeclutter=" + (_declutter != null && _declutter.IsEnabled ? "enabled" : "disabled")
+                + ";RemoteCpuBudget=" + (_remoteBudget != null && _remoteBudget.IsEnabled ? "enabled" : "disabled")
+                + ";FramePacing=" + (_framePacing != null && _framePacing.IsEnabled ? "enabled" : "disabled")
+                + ";KnownModFixes=" + (_compatibility != null && _compatibility.IsEnabled ? "enabled" : "disabled")
+                + ";Preset=" + _configuration.Preset.Value;
         }
 
         private string ShadowStatus()
@@ -269,11 +307,58 @@ namespace TarkovPerformanceSuite
                 + " | " + (counters.Complete ? "complete" : "scanning") + " discovery " + counters.DiscoveryMs.ToString("F1") + " ms batch " + counters.AverageBatchMs.ToString("F3") + " ms";
         }
 
+        private string RemoteBudgetStatus()
+        {
+            RemoteUpdateBudgetCounters counters = _remoteBudget.Counters;
+            return _remoteBudget.StatusText + " | remote " + counters.RemoteCharacters + " hidden " + counters.HiddenCharacters + " budgeted " + counters.BudgetedCharacters
+                + " animators " + counters.CulledAnimators + " skipped props " + counters.SkippedPropUpdates + " triggers " + counters.SkippedTriggerSearches
+                + " | cost " + counters.AverageMs.ToString("F3") + " ms";
+        }
+
         private string ExperimentStatus() => "Shadows: " + ShadowStatus()
             + "\nOffscreen skinning: " + SkinningStatus()
             + "\nAggressive quality: " + _aggressiveQuality.StatusText
             + "\nRemote render LOD: " + RenderLodStatus()
-            + "\nDeclutter: " + DeclutterStatus();
+            + "\nDeclutter: " + DeclutterStatus()
+            + "\nRemote CPU budget: " + RemoteBudgetStatus()
+            + "\nFrame pacing: " + _framePacing.StatusText
+            + "\nCompatibility: " + _compatibility.StatusText;
+
+        private void ApplyPresetIfChanged()
+        {
+            if (_configuration == null || _configuration.Preset.Value == _lastPreset) return;
+            _lastPreset = _configuration.Preset.Value;
+            if (_lastPreset == PerformancePreset.Custom) return;
+
+            _configuration.KnownModFixesEnabled.Value = true;
+            _configuration.FramePacingEnabled.Value = true;
+            _configuration.RemoteUpdateBudgetEnabled.Value = true;
+            _configuration.RemoteAnimatorCullingEnabled.Value = true;
+            _configuration.AggressiveModeEnabled.Value = false;
+            _configuration.RemoteAiRenderLodEnabled.Value = false;
+            _configuration.SkinningEnabled.Value = false;
+
+            if (_lastPreset == PerformancePreset.Balanced)
+            {
+                _configuration.RemoteUpdateBudgetDistance.Value = 60f;
+                _configuration.RemoteUpdateBudgetHold.Value = 0.3f;
+                _configuration.RemoteUpdateBudgetDivisor.Value = 2;
+                _configuration.ShadowEnabled.Value = false;
+                _configuration.CosmeticDeclutterEnabled.Value = false;
+            }
+            else if (_lastPreset == PerformancePreset.OldCpuAggressive)
+            {
+                _configuration.RemoteUpdateBudgetDistance.Value = 35f;
+                _configuration.RemoteUpdateBudgetHold.Value = 0.15f;
+                _configuration.RemoteUpdateBudgetDivisor.Value = 4;
+                _configuration.ShadowEnabled.Value = true;
+                _configuration.ShadowDistance.Value = 80f;
+                _configuration.ShadowMinimumDistance.Value = 45f;
+                _configuration.ShadowTargetFps.Value = 50f;
+                _configuration.CosmeticDeclutterEnabled.Value = true;
+            }
+            Logger?.LogInfo("Applied performance preset: " + _lastPreset + ". LOD and texture quality changes remain disabled.");
+        }
 
         private static string ReadMapName(GameWorld world)
         {

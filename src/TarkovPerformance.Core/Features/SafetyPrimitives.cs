@@ -214,6 +214,16 @@ namespace TarkovPerformanceSuite.Features
         public void Reset(double now = 0) { _next = now; }
     }
 
+    public static class FrameWorkBudget
+    {
+        public static bool ShouldRun(int frame, int stableId, int divisor)
+        {
+            if (divisor <= 1) return true;
+            int value = (frame & int.MaxValue) + (stableId & int.MaxValue);
+            return value % divisor == 0;
+        }
+    }
+
     public sealed class OriginalStateCache<TKey, TState>
     {
         private readonly Dictionary<TKey, TState> _states = new Dictionary<TKey, TState>();

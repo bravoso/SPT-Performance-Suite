@@ -139,18 +139,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         private void ProcessEntities(float now, ValidatedConfiguration configuration)
         {
-            bool haveLocal = false;
-            Vector3 localPosition = default;
-            foreach (TrackedEntity entity in _registry.Entities)
-            {
-                if (entity.Kind == EntityKind.LocalPlayer && entity.Player != null)
-                {
-                    localPosition = entity.Player.Transform.position;
-                    haveLocal = true;
-                    break;
-                }
-            }
-            if (!haveLocal) return;
+            if (!_registry.TryGetLocalPosition(out _)) return;
 
             float distance = (float)configuration.SkinningDistance;
             float distanceSquared = distance * distance;
@@ -166,10 +155,9 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 ai++;
                 int id = entity.Player.GetInstanceID();
                 _seenEntities.Add(id);
-                bool alive = entity.Player.HealthController != null && entity.Player.HealthController.IsAlive;
-                Vector3 delta = entity.Player.Transform.position - localPosition;
-                bool beyond = delta.sqrMagnitude > distanceSquared;
-                bool visible = entity.Player.IsVisible || IsVisible(entity.Renderers);
+                bool alive = entity.IsAlive;
+                bool beyond = entity.DistanceSquared > distanceSquared;
+                bool visible = entity.IsVisible;
                 if (!alive || !beyond || visible)
                 {
                     _offscreenSince.Remove(id);
