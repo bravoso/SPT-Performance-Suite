@@ -1,0 +1,13 @@
+.tools/
+.inspection/
+.vs/
+.idea/
+**/bin/
+**/obj/
+TestResults/
+*.user
+*.suo
+local.settings.json
+Directory.Build.local.props
+artifacts/
+
