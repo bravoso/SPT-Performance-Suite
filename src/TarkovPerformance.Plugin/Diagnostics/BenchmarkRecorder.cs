@@ -50,9 +50,9 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             _logger.LogInfo($"Benchmark capture started: {durationSeconds:F0} seconds, map {_map}, {_features}");
         }
 
-        internal void Record(double now, double frameTimeMs, ProfilerMetrics metrics, EntityCounts counts, int? fikaServerFps)
+        internal bool Record(double now, double frameTimeMs, ProfilerMetrics metrics, EntityCounts counts, int? fikaServerFps)
         {
-            if (!IsCapturing) return;
+            if (!IsCapturing) return false;
             ElapsedSeconds = now - _startedRealtime;
             double fps = frameTimeMs > 0 ? 1000.0 / frameTimeMs : 0;
             if (_count < _buffer.Length)
@@ -62,8 +62,15 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                     TimestampSeconds = ElapsedSeconds,
                     FrameTimeMs = frameTimeMs,
                     Fps = fps,
-                    MainThreadMs = metrics.TimeMs("Main Thread"),
-                    RenderThreadMs = metrics.TimeMs("Render Thread"),
+                    MainThreadMs = metrics.PreferredTimeMs("CPU Main Thread Frame Time", "Main Thread"),
+                    RenderThreadMs = metrics.PreferredTimeMs("CPU Render Thread Frame Time", "Render Thread"),
+                    CpuTotalMs = metrics.TimeMs("CPU Total Frame Time"),
+                    GpuFrameMs = metrics.TimeMs("GPU Frame Time"),
+                    FrameTimeGpuMs = metrics.TimeMs("FrameTime.GPU"),
+                    GfxWaitForPresentMs = metrics.TimeMs("Gfx.WaitForPresentOnGfxThread"),
+                    PlayerLoopMs = metrics.TimeMs("PlayerLoop"),
+                    WaitForTargetFpsMs = metrics.TimeMs("WaitForTargetFPS"),
+                    GcCollectMs = metrics.TimeMs("GC.Collect"),
                     GcValue = metrics.Value("GC Allocated In Frame") ?? metrics.Value("GC Reserved Memory"),
                     DrawCalls = metrics.Value("Draw Calls Count"),
                     SetPassCalls = metrics.Value("SetPass Calls Count"),
@@ -79,7 +86,12 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                 _sumFps += fps;
                 if (fps < _minimumFps) _minimumFps = fps;
             }
-            if (ElapsedSeconds >= DurationSeconds) Finish(false);
+            if (ElapsedSeconds >= DurationSeconds)
+            {
+                Finish(false);
+                return true;
+            }
+            return false;
         }
 
         internal void Finish(bool cancelled)
@@ -132,4 +144,3 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         }
     }
 }
-

@@ -1,6 +1,6 @@
 # Tarkov Performance Suite
 
-Profiler-first BepInEx diagnostics and conservative performance experiments for SPT/EFT. Version 0.1.0 targets the inspected EFT 0.16.9.40087 / SPT 4.0.13 environment, but all game references are supplied at build time rather than committed as binaries.
+Profiler-first BepInEx diagnostics and conservative performance experiments for SPT/EFT. Version 0.1.1 targets the inspected EFT 0.16.9.40087 / SPT 4.0.13 environment, but all game references are supplied at build time rather than committed as binaries.
 
 The suite does not change AI decisions, bot population, damage, networking, inventory, navigation, or global quality settings. Its only behavior-changing experiment is distant remote-AI shadow casting, disabled by default and designed to restore every renderer state.
 
@@ -21,4 +21,3 @@ $env:SPT_TEST_ROOT = 'D:\path\to\disposable-SPT'
 ```
 
 See `docs/IN_GAME_TESTING.md` before enabling the experiment.
-

@@ -48,14 +48,16 @@ namespace TarkovPerformanceSuite.Tests
                 StartedUtc = "2026-01-01T00:00:00Z",
                 MapName = "factory4_day",
                 EnabledFeatures = "shadow=false",
-                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, PlayerCount = 2, AiCount = 1 } }
+                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1 } }
             };
             var csv = new StringWriter(); BenchmarkSerializer.WriteCsv(csv, export);
             var json = new StringWriter(); BenchmarkSerializer.WriteJson(json, export);
             True(csv.ToString().Contains("frame_time_ms"));
+            True(csv.ToString().Contains("gpu_frame_ms"));
             True(csv.ToString().Contains("shadow=false"));
             True(json.ToString().Contains("factory4_day"));
             True(json.ToString().Contains("\"frameTimeMs\":10"));
+            True(json.ToString().Contains("\"gpuFrameMs\":4"));
         }
 
         private static void TestEntityClassification()

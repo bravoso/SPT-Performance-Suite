@@ -11,16 +11,16 @@ namespace TarkovPerformanceSuite.Configuration
             Enabled = config.Bind("General", "Enabled", true, "Master switch for the suite.");
             VerboseLogging = config.Bind("General", "VerboseLogging", false, "Log additional lifecycle details; never logs per frame.");
             OverlayEnabled = config.Bind("Diagnostics", "OverlayEnabled", true, "Show the in-raid diagnostics overlay.");
-            OverlayKey = config.Bind("Diagnostics", "OverlayKey", new KeyboardShortcut(KeyCode.F8), "Toggle the diagnostics overlay.");
-            CaptureKey = config.Bind("Diagnostics", "CaptureKey", new KeyboardShortcut(KeyCode.F9), "Start a benchmark capture.");
-            DiagnosticReportKey = config.Bind("Diagnostics", "DiagnosticReportKey", new KeyboardShortcut(KeyCode.F10), "Export a diagnostic report.");
+            OverlayKey = config.Bind("Diagnostics", "OverlayKey", new KeyboardShortcut(KeyCode.Keypad7), "Toggle the diagnostics overlay. Also editable in the F12 Configuration Manager.");
+            CaptureKey = config.Bind("Diagnostics", "CaptureKey", new KeyboardShortcut(KeyCode.Keypad8), "Start a benchmark capture. Also editable in the F12 Configuration Manager.");
+            DiagnosticReportKey = config.Bind("Diagnostics", "DiagnosticReportKey", new KeyboardShortcut(KeyCode.Keypad9), "Export a diagnostic report with current profiler and method timings.");
             CaptureDurationSeconds = config.Bind("Diagnostics", "CaptureDurationSeconds", 120f, "Capture duration, clamped to 5-900 seconds.");
             ExportCsv = config.Bind("Diagnostics", "ExportCsv", true, "Write CSV in addition to JSON.");
-            MethodTimingEnabled = config.Bind("Diagnostics", "MethodTimingEnabled", false, "Enable diagnostics-only Harmony method timing at next plugin load.");
+            MethodTimingEnabled = config.Bind("Diagnostics", "MethodTimingEnabled", false, "Enable diagnostics-only Harmony method timing. Can be changed live from the F12 menu.");
             ShadowEnabled = config.Bind("Experiments", "RemoteCharacterShadowsEnabled", false, "Disable distant confirmed remote-AI shadow casting. Disabled by default.");
             ShadowDistance = config.Bind("Experiments", "RemoteCharacterShadowDistance", 120f, "Distance in metres, clamped to 20-1000.");
             ShadowUpdateInterval = config.Bind("Experiments", "RemoteCharacterShadowUpdateIntervalSeconds", 0.25f, "Time-based update interval, clamped to 0.1-5 seconds.");
-            ShadowToggleKey = config.Bind("Experiments", "RemoteCharacterShadowToggleKey", new KeyboardShortcut(KeyCode.F12), "Toggle the shadow experiment.");
+            ShadowToggleKey = config.Bind("Experiments", "RemoteCharacterShadowToggleKey", new KeyboardShortcut(KeyCode.Keypad6), "Toggle the shadow experiment. The Boolean toggle is also available in the F12 menu.");
             ShadowDryRun = config.Bind("Experiments", "RemoteCharacterShadowsDryRun", false, "Report changes without modifying renderers.");
         }
 
@@ -42,4 +42,3 @@ namespace TarkovPerformanceSuite.Configuration
         internal ValidatedConfiguration Validated => ConfigurationValidator.Validate(CaptureDurationSeconds.Value, ShadowDistance.Value, ShadowUpdateInterval.Value);
     }
 }
-

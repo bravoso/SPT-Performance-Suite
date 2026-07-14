@@ -12,6 +12,13 @@ namespace TarkovPerformanceSuite.Diagnostics
         public double Fps;
         public double? MainThreadMs;
         public double? RenderThreadMs;
+        public double? CpuTotalMs;
+        public double? GpuFrameMs;
+        public double? FrameTimeGpuMs;
+        public double? GfxWaitForPresentMs;
+        public double? PlayerLoopMs;
+        public double? WaitForTargetFpsMs;
+        public double? GcCollectMs;
         public long? GcValue;
         public long? DrawCalls;
         public long? SetPassCalls;
@@ -41,7 +48,7 @@ namespace TarkovPerformanceSuite.Diagnostics
         {
             if (writer == null) throw new ArgumentNullException(nameof(writer));
             if (export == null) throw new ArgumentNullException(nameof(export));
-            writer.WriteLine("timestamp,frame_time_ms,fps,main_thread_ms,render_thread_ms,gc_value,draw_calls,setpass_calls,player_count,ai_count,visible_ai_count,corpse_count,animator_count,skinned_renderer_count,shadow_renderer_count,fika_server_fps,enabled_features");
+            writer.WriteLine("timestamp,frame_time_ms,fps,main_thread_ms,render_thread_ms,cpu_total_ms,gpu_frame_ms,frame_time_gpu_ms,gfx_wait_for_present_ms,player_loop_ms,wait_for_target_fps_ms,gc_collect_ms,gc_value,draw_calls,setpass_calls,player_count,ai_count,visible_ai_count,corpse_count,animator_count,skinned_renderer_count,shadow_renderer_count,fika_server_fps,enabled_features");
             BenchmarkSample[] samples = export.Samples ?? Array.Empty<BenchmarkSample>();
             for (int i = 0; i < samples.Length; i++)
             {
@@ -51,6 +58,13 @@ namespace TarkovPerformanceSuite.Diagnostics
                 WriteDouble(writer, s.Fps); writer.Write(',');
                 WriteNullableDouble(writer, s.MainThreadMs); writer.Write(',');
                 WriteNullableDouble(writer, s.RenderThreadMs); writer.Write(',');
+                WriteNullableDouble(writer, s.CpuTotalMs); writer.Write(',');
+                WriteNullableDouble(writer, s.GpuFrameMs); writer.Write(',');
+                WriteNullableDouble(writer, s.FrameTimeGpuMs); writer.Write(',');
+                WriteNullableDouble(writer, s.GfxWaitForPresentMs); writer.Write(',');
+                WriteNullableDouble(writer, s.PlayerLoopMs); writer.Write(',');
+                WriteNullableDouble(writer, s.WaitForTargetFpsMs); writer.Write(',');
+                WriteNullableDouble(writer, s.GcCollectMs); writer.Write(',');
                 WriteNullableLong(writer, s.GcValue); writer.Write(',');
                 WriteNullableLong(writer, s.DrawCalls); writer.Write(',');
                 WriteNullableLong(writer, s.SetPassCalls); writer.Write(',');
@@ -86,6 +100,13 @@ namespace TarkovPerformanceSuite.Diagnostics
                 writer.Write(",\"fps\":"); WriteDouble(writer, s.Fps);
                 writer.Write(",\"mainThreadMs\":"); WriteJsonNullable(writer, s.MainThreadMs);
                 writer.Write(",\"renderThreadMs\":"); WriteJsonNullable(writer, s.RenderThreadMs);
+                writer.Write(",\"cpuTotalMs\":"); WriteJsonNullable(writer, s.CpuTotalMs);
+                writer.Write(",\"gpuFrameMs\":"); WriteJsonNullable(writer, s.GpuFrameMs);
+                writer.Write(",\"frameTimeGpuMs\":"); WriteJsonNullable(writer, s.FrameTimeGpuMs);
+                writer.Write(",\"gfxWaitForPresentMs\":"); WriteJsonNullable(writer, s.GfxWaitForPresentMs);
+                writer.Write(",\"playerLoopMs\":"); WriteJsonNullable(writer, s.PlayerLoopMs);
+                writer.Write(",\"waitForTargetFpsMs\":"); WriteJsonNullable(writer, s.WaitForTargetFpsMs);
+                writer.Write(",\"gcCollectMs\":"); WriteJsonNullable(writer, s.GcCollectMs);
                 writer.Write(",\"gcValue\":"); WriteJsonNullable(writer, s.GcValue);
                 writer.Write(",\"drawCalls\":"); WriteJsonNullable(writer, s.DrawCalls);
                 writer.Write(",\"setPassCalls\":"); WriteJsonNullable(writer, s.SetPassCalls);
@@ -139,4 +160,3 @@ namespace TarkovPerformanceSuite.Diagnostics
         }
     }
 }
-

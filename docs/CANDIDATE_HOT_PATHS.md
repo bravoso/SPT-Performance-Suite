@@ -1,6 +1,6 @@
 # Candidate hot paths
 
-Inspection used ILSpyCmd 9.1 against the installed DLLs. Timing is diagnostics-only, disabled by default, and never skips or changes an original method.
+Inspection used ILSpyCmd 9.1 against the installed DLLs. Timing is diagnostics-only, disabled by default, and never skips or changes an original method. Version 0.1.1 adds verified high-level `GameWorld` and `Player` update/presentation targets so a CPU-bound frame can be narrowed before considering any optimization.
 
 Installed assembly fingerprints:
 
@@ -16,5 +16,6 @@ Installed assembly fingerprints:
 
 The signature fingerprint is SHA-256 of the fully qualified signature. The plugin also hashes each installed method body's IL bytes at runtime and includes that value in the F10 report. That runtime value is preferable because it is taken from the post-prepatch assembly actually loaded by Unity.
 
-Other tempting methods were not added: player update, AI, animation setters, IK, procedural weapon animation, physics, audio, inventory, health, spawning, and combat paths remain unpatched until benchmark evidence justifies a separate experiment.
+AI decision logic, animation setters, procedural weapon internals, physics, audio, inventory, health, spawning, and combat paths remain unpatched until benchmark evidence justifies a separate diagnostic target. `FBBIKUpdate` is timed only as a high-level presentation bucket; no IK behavior is changed.
 
+Additional 0.1.1 timing-only targets: `GameWorld.Update`, `GameWorld.LateUpdateWorld`, `Player.UpdateTick`, `Player.FixedUpdateTick`, `Player.LateUpdate`, `Player.VisualPass`, `Player.ComplexUpdate`, `Player.ComplexLateUpdate`, `Player.ArmsUpdate`, `Player.BodyUpdate`, `Player.ManualUpdate`, `Player.FBBIKUpdate`, and Fika's override of `FikaPlayer.ManualUpdate`. Exact signatures, IL hashes, and owners are written at runtime before patching.

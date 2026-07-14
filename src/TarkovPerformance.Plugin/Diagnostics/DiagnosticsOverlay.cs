@@ -30,16 +30,28 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             fika.GetCounts(out int fikaObserved, out int fikaAi, out int fikaVisibleAi);
 
             _builder.Clear();
-            _builder.AppendLine("Tarkov Performance Suite 0.1.0  [F8 overlay | F9 capture | F10 report | F12 experiment]");
+            _builder.AppendLine("Tarkov Performance Suite 0.1.1  [Num7 overlay | Num8 capture | Num9 report | Num6 experiment | F12 settings]");
             _builder.Append("State: ").Append(raidState).Append(" | Experiment: ").AppendLine(experimentStatus);
             _builder.Append("FPS ").Append(fps.ToString("F1")).Append(" | frame ").Append(instantMs.ToString("F2")).Append(" ms | avg ").Append(stats.AverageMs.ToString("F2"))
                 .Append(" | median ").Append(stats.MedianMs.ToString("F2")).Append(" | p95 ").Append(stats.P95Ms.ToString("F2")).Append(" | p99 ").Append(stats.P99Ms.ToString("F2")).AppendLine(" ms");
             _builder.Append("Capture: ").Append(capture.IsCapturing ? capture.ElapsedSeconds.ToString("F1") + "/" + capture.DurationSeconds.ToString("F0") + " s" : "idle")
                 .Append(" | min FPS ").Append(capture.MinimumFps.ToString("F1")).Append(" | avg FPS ").Append(capture.AverageFps.ToString("F1")).AppendLine();
-            AppendMetric("Main", metrics.TimeMs("Main Thread"), "ms"); AppendMetric("Render", metrics.TimeMs("Render Thread"), "ms");
-            AppendLong("GC/frame", metrics.Value("GC Allocated In Frame")); AppendLong("managed reserve", metrics.Value("GC Reserved Memory")); AppendLong("system", metrics.Value("System Used Memory"));
+            AppendMetric("CPU main", metrics.PreferredTimeMs("CPU Main Thread Frame Time", "Main Thread"), "ms");
+            AppendMetric("CPU render", metrics.PreferredTimeMs("CPU Render Thread Frame Time", "Render Thread"), "ms");
+            AppendMetric("CPU total", metrics.TimeMs("CPU Total Frame Time"), "ms");
+            AppendMetric("GPU", metrics.PreferredTimeMs("GPU Frame Time", "FrameTime.GPU"), "ms");
+            _builder.AppendLine();
+            AppendMetric("PlayerLoop", metrics.TimeMs("PlayerLoop"), "ms");
+            AppendMetric("present wait", metrics.TimeMs("Gfx.WaitForPresentOnGfxThread"), "ms");
+            AppendMetric("FPS-limit wait", metrics.TimeMs("WaitForTargetFPS"), "ms");
+            AppendMetric("GC.Collect", metrics.TimeMs("GC.Collect"), "ms");
+            _builder.AppendLine();
+            AppendMemory("managed reserve", metrics.Value("GC Reserved Memory")); AppendMemory("managed used", metrics.Value("GC Used Memory")); AppendMemory("system", metrics.Value("System Used Memory"));
+            _builder.AppendLine();
             AppendLong("draw", metrics.Value("Draw Calls Count")); AppendLong("batches", metrics.Value("Batches Count")); AppendLong("SetPass", metrics.Value("SetPass Calls Count"));
+            _builder.AppendLine();
             AppendLong("triangles", metrics.Value("Triangles Count")); AppendLong("vertices", metrics.Value("Vertices Count")); AppendLong("shadow casters", metrics.Value("Shadow Casters Count"));
+            _builder.AppendLine();
             _builder.Append("Entities: players ").Append(counts.Players).Append(" (local ").Append(counts.LocalPlayers).Append(", human ").Append(counts.RemoteHumans)
                 .Append(") | AI ").Append(counts.Ai).Append(" living ").Append(counts.LivingAi).Append(" visible ").Append(counts.VisibleAi).Append(" | observed corpses ").Append(counts.Corpses).AppendLine();
             _builder.Append("Presentation: animators ").Append(counts.Animators).Append(" | skinned renderers ").Append(counts.SkinnedRenderers).Append(" | AI shadow renderers ").Append(counts.ShadowRenderers).AppendLine();
@@ -58,7 +70,7 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                 _style = new GUIStyle(GUI.skin.box) { alignment = TextAnchor.UpperLeft, fontSize = 13, wordWrap = false };
                 _style.normal.textColor = Color.white;
             }
-            GUI.Box(new Rect(12, 12, 920, 300), _text, _style);
+            GUI.Box(new Rect(12, 12, Mathf.Min(1040, Screen.width - 24), Mathf.Min(520, Screen.height - 24)), _text, _style);
         }
 
         internal void Reset()
@@ -75,6 +87,10 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         private void AppendLong(string label, long? value)
         {
             _builder.Append(label).Append(' ').Append(value?.ToString() ?? "n/a").Append(" | ");
+        }
+        private void AppendMemory(string label, long? value)
+        {
+            _builder.Append(label).Append(' ').Append(value.HasValue ? (value.Value / 1048576.0d).ToString("F1") : "n/a").Append(" MiB | ");
         }
     }
 }

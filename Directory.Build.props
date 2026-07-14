@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>Lucas Willuweit</Authors>
     <Company>TarkovPerformanceSuite</Company>
     <LangVersion>latest</LangVersion>
@@ -10,4 +10,3 @@
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
 </Project>
-

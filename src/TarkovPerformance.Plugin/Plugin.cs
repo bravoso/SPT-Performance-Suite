@@ -19,7 +19,7 @@ namespace TarkovPerformanceSuite
     {
         public const string PluginGuid = "com.lucaswilluweit.tarkovperformancesuite";
         public const string PluginName = "Tarkov Performance Suite";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.1.1";
 
         private PluginConfiguration _configuration;
         private RuntimeInformation _runtime;
@@ -94,6 +94,7 @@ namespace TarkovPerformanceSuite
                 if (capturePressed)
                 {
                     double duration = _configuration.Validated.CaptureSeconds;
+                    _timing.ResetAggregates(now);
                     _benchmark.Start(now, duration, ReadMapName(_lifecycle.World), FeatureState(), Path.Combine(_outputRoot, "benchmarks"), _configuration.ExportCsv.Value);
                 }
 
@@ -102,7 +103,8 @@ namespace TarkovPerformanceSuite
                     _counts = _entities.CountNow(now);
                     if (_overlay.Visible) _overlay.AddFrame(frameMs);
                 }
-                if (_benchmark.IsCapturing) _benchmark.Record(now, frameMs, _metrics, _counts, _fika.ServerFps);
+                bool captureCompleted = _benchmark.IsCapturing && _benchmark.Record(now, frameMs, _metrics, _counts, _fika.ServerFps);
+                if (captureCompleted) ExportDiagnosticReport();
                 _overlay.SuiteAverageMs = _suiteAverageMs;
                 if (_overlay.NeedsRefresh(now))
                 {
@@ -179,7 +181,8 @@ namespace TarkovPerformanceSuite
             try
             {
                 string benchmarkConfiguration = "durationSeconds=" + _configuration.Validated.CaptureSeconds + ";exportCsv=" + _configuration.ExportCsv.Value;
-                string path = DiagnosticReport.Write(Path.Combine(_outputRoot, "diagnostics"), _runtime, _metrics, _counts, _exceptions, FeatureState() + ";" + ShadowStatus(), benchmarkConfiguration, _timing.PatchReport, _suiteAverageMs);
+                string methodSnapshot = _timing.GetDiagnosticSnapshot(Time.realtimeSinceStartup);
+                string path = DiagnosticReport.Write(Path.Combine(_outputRoot, "diagnostics"), _runtime, _metrics, _counts, _exceptions, FeatureState() + ";" + ShadowStatus(), benchmarkConfiguration, _timing.PatchReport, methodSnapshot, _suiteAverageMs);
                 Logger.LogInfo("Diagnostic report exported: " + path);
             }
             catch (Exception ex)

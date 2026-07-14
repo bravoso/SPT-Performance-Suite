@@ -11,13 +11,15 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
     internal sealed class ProfilerMetric : IDisposable
     {
         private ProfilerRecorder _recorder;
-        internal ProfilerMetric(string name, ProfilerRecorderHandle handle)
+        internal ProfilerMetric(string name, ProfilerRecorderHandle handle, ProfilerMarkerDataUnit unitType)
         {
             Name = name;
+            UnitType = unitType;
             _recorder = new ProfilerRecorder(handle, 1);
             _recorder.Start();
         }
         internal string Name { get; }
+        internal ProfilerMarkerDataUnit UnitType { get; }
         internal bool Valid => _recorder.Valid;
         internal long? LastValue => _recorder.Valid && _recorder.Count > 0 ? _recorder.LastValue : (long?)null;
         public void Dispose() { if (_recorder.Valid) _recorder.Dispose(); }
@@ -28,7 +30,8 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         private static readonly string[] DesiredNames =
         {
             "Main Thread", "Render Thread", "GC Allocated In Frame", "GC Reserved Memory", "System Used Memory",
-            "Draw Calls Count", "Batches Count", "SetPass Calls Count", "Triangles Count", "Vertices Count", "Shadow Casters Count"
+            "GC Used Memory", "App Resident Memory", "Video Used Memory", "Draw Calls Count", "Batches Count",
+            "SetPass Calls Count", "Triangles Count", "Vertices Count", "Shadow Casters Count", "Visible Skinned Meshes Count"
         };
 
         private readonly Dictionary<string, ProfilerMetric> _metrics = new Dictionary<string, ProfilerMetric>(StringComparer.OrdinalIgnoreCase);
@@ -52,8 +55,8 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                     ProfilerRecorderDescription description = ProfilerRecorderHandle.GetDescription(_handles[i]);
                     string name = description.Name;
                     _available.Add(description.Category.Name + " | " + name + " | " + description.UnitType);
-                    if (!IsDesired(name) || _metrics.ContainsKey(name)) continue;
-                    var metric = new ProfilerMetric(name, _handles[i]);
+                    if (!IsDesired(name, description.UnitType) || _metrics.ContainsKey(name)) continue;
+                    var metric = new ProfilerMetric(name, _handles[i], description.UnitType);
                     if (metric.Valid) _metrics.Add(name, metric); else metric.Dispose();
                 }
                 _available.Sort(StringComparer.OrdinalIgnoreCase);
@@ -71,6 +74,27 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         {
             long? value = Value(name);
             return value.HasValue ? value.Value * 0.000001d : (double?)null;
+        }
+
+        internal double? PreferredTimeMs(string primary, string fallback)
+        {
+            double? primaryValue = TimeMs(primary);
+            return primaryValue ?? TimeMs(fallback);
+        }
+
+        internal void AppendCurrentSnapshot(StringBuilder builder)
+        {
+            foreach (ProfilerMetric metric in _metrics.Values)
+            {
+                long? value = metric.LastValue;
+                builder.Append(metric.Name).Append(" = ");
+                if (!value.HasValue) builder.AppendLine("n/a");
+                else if (metric.UnitType == ProfilerMarkerDataUnit.TimeNanoseconds)
+                    builder.Append((value.Value * 0.000001d).ToString("F4")).AppendLine(" ms");
+                else if (metric.UnitType == ProfilerMarkerDataUnit.Bytes)
+                    builder.Append((value.Value / 1048576.0d).ToString("F2")).AppendLine(" MiB");
+                else builder.Append(value.Value).AppendLine(" " + metric.UnitType);
+            }
         }
 
         internal void WriteAvailableReport(string path)
@@ -92,11 +116,11 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             _metrics.Clear();
         }
 
-        private static bool IsDesired(string name)
+        private static bool IsDesired(string name, ProfilerMarkerDataUnit unitType)
         {
+            if (unitType == ProfilerMarkerDataUnit.TimeNanoseconds && !string.Equals(name, "<Uninitialized ProfilerMarker>", StringComparison.OrdinalIgnoreCase)) return true;
             for (int i = 0; i < DesiredNames.Length; i++) if (string.Equals(name, DesiredNames[i], StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }
     }
 }
-
