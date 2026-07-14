@@ -37,7 +37,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private readonly HashSet<Renderer> _seenThisTick = new HashSet<Renderer>();
         private readonly List<Renderer> _restoreBuffer = new List<Renderer>(128);
         private bool _raidActive;
-        private bool _lastDryRun;
         private float _nextUpdate;
         private double _averageMs;
         private ShadowFeatureCounters _counters;
@@ -53,14 +52,12 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         public string Name => "Remote Character Shadow LOD";
         public bool IsAvailable => !_breaker.IsOpen;
         public bool IsEnabled { get; private set; }
-        internal bool DryRun => _configuration.ShadowDryRun.Value;
         internal ShadowFeatureCounters Counters => _counters;
-        internal string StatusText => IsEnabled ? (DryRun ? "enabled (dry-run)" : "enabled") : _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
+        internal string StatusText => IsEnabled ? "enabled" : _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
 
         public void Initialize()
         {
             _breaker.Reset();
-            _lastDryRun = DryRun;
             SetEnabled(_configuration.ShadowEnabled.Value);
         }
 
@@ -87,7 +84,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             IsEnabled = enabled;
             _configuration.ShadowEnabled.Value = enabled;
             if (!enabled) RestoreAll();
-            _logger.LogInfo($"Remote Character Shadow LOD {(enabled ? "enabled" : "disabled")}; dry-run={DryRun}. Existing renderers restored when disabling.");
+            _logger.LogInfo($"Remote Character Shadow LOD {(enabled ? "enabled" : "disabled")}. Existing renderers restored when disabling.");
         }
 
         public void Shutdown()
@@ -100,11 +97,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         internal void Tick(float now)
         {
             if (!IsEnabled || !_raidActive || now < _nextUpdate) return;
-            if (DryRun != _lastDryRun)
-            {
-                if (DryRun) RestoreAll();
-                _lastDryRun = DryRun;
-            }
             _nextUpdate = now + (float)_configuration.Validated.UpdateIntervalSeconds;
             long started = Stopwatch.GetTimestamp();
             try
@@ -172,20 +164,19 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                     if (isBeyond)
                     {
                         if (renderer.shadowCastingMode == ShadowCastingMode.Off) continue;
-                        if (DryRun) { disabled++; continue; }
                         if (!_originalStates.ContainsKey(renderer)) _originalStates.Add(renderer, renderer.shadowCastingMode);
                         renderer.shadowCastingMode = ShadowCastingMode.Off;
                         disabled++;
                     }
-                    else if (!DryRun)
+                    else
                     {
                         RestoreOne(renderer);
                     }
                 }
             }
 
-            if (!DryRun) RestoreNoLongerTracked();
-            _counters = new ShadowFeatureCounters(ai, beyond, tracked, DryRun ? 0 : _originalStates.Count, distance, _averageMs);
+            RestoreNoLongerTracked();
+            _counters = new ShadowFeatureCounters(ai, beyond, tracked, _originalStates.Count, distance, _averageMs);
         }
 
         private static bool IsEligibleRenderer(Renderer renderer)

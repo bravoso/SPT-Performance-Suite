@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using BepInEx;
+using BepInEx.Configuration;
 using EFT;
 using TarkovPerformanceSuite.Configuration;
 using TarkovPerformanceSuite.Core;
@@ -19,7 +20,7 @@ namespace TarkovPerformanceSuite
     {
         public const string PluginGuid = "com.lucaswilluweit.tarkovperformancesuite";
         public const string PluginName = "Tarkov Performance Suite";
-        public const string PluginVersion = "0.4.0";
+        public const string PluginVersion = "0.8.0";
 
         private PluginConfiguration _configuration;
         private RuntimeInformation _runtime;
@@ -34,11 +35,14 @@ namespace TarkovPerformanceSuite
         private RemoteCharacterShadowFeature _shadows;
         private RemoteAiOffscreenSkinningFeature _skinning;
         private AggressiveQualityFeature _aggressiveQuality;
-        private RemoteAiRenderLodFeature _renderLod;
         private CosmeticDeclutterFeature _declutter;
         private RemoteUpdateBudgetFeature _remoteBudget;
+        private CpuThreadingFeature _cpuThreading;
         private FramePacingFeature _framePacing;
         private KnownModCompatibilityFeature _compatibility;
+        private HotPathLogSuppressionFeature _hotLogs;
+        private CombatPresentationBudgetFeature _combatPresentation;
+        private PipScopeOptimizationFeature _pipScopes;
         private EntityCounts _counts;
         private double _suiteAverageMs;
         private string _outputRoot;
@@ -57,25 +61,31 @@ namespace TarkovPerformanceSuite
             _shadows = new RemoteCharacterShadowFeature(Logger, _configuration, _entities, _exceptions);
             _skinning = new RemoteAiOffscreenSkinningFeature(Logger, _configuration, _entities, _exceptions);
             _aggressiveQuality = new AggressiveQualityFeature(Logger, _configuration, _exceptions);
-            _renderLod = new RemoteAiRenderLodFeature(Logger, _configuration, _entities, _exceptions);
             _declutter = new CosmeticDeclutterFeature(Logger, _configuration, _exceptions);
             _remoteBudget = new RemoteUpdateBudgetFeature(Logger, _configuration, _entities, _exceptions);
+            _cpuThreading = new CpuThreadingFeature(Logger, _configuration, _exceptions);
             _framePacing = new FramePacingFeature(Logger, _configuration, _exceptions);
             _compatibility = new KnownModCompatibilityFeature(Logger, _configuration, _exceptions);
+            _hotLogs = new HotPathLogSuppressionFeature(Logger, _configuration, _exceptions);
+            _combatPresentation = new CombatPresentationBudgetFeature(Logger, _configuration, _exceptions);
+            _pipScopes = new PipScopeOptimizationFeature(Logger, _configuration, _exceptions);
             _outputRoot = Path.Combine(BepInEx.Paths.PluginPath, "TarkovPerformanceSuite");
             _lifecycle.RaidStarted += OnRaidStarted;
             _lifecycle.RaidEnded += OnRaidEnded;
             _lifecycle.StateChanged += state => { if (_configuration.VerboseLogging.Value) Logger.LogInfo("Lifecycle state: " + state); };
-            Logger.LogInfo($"{PluginName} {PluginVersion} loaded. All optimization experiments default to disabled.");
+            Logger.LogInfo($"{PluginName} {PluginVersion} loaded. Aggressive old-CPU optimizations are enabled by default; Num4 toggles the complete optimization stack for A/B testing.");
             _runtime.Log(Logger);
             _shadows.Initialize();
             _skinning.Initialize();
             _aggressiveQuality.Initialize();
-            _renderLod.Initialize();
             _declutter.Initialize();
             _remoteBudget.Initialize();
+            _cpuThreading.Initialize();
             _framePacing.Initialize();
             _compatibility.Initialize();
+            _hotLogs.Initialize();
+            _combatPresentation.Initialize();
+            _pipScopes.Initialize();
         }
 
         private void Update()
@@ -89,14 +99,7 @@ namespace TarkovPerformanceSuite
                 if (!_configuration.Enabled.Value)
                 {
                     _timing.SetRuntimeEnabled(false);
-                    _shadows.SetEnabled(false);
-                    _skinning.SetEnabled(false);
-                    _aggressiveQuality.SetEnabled(false);
-                    _renderLod.SetEnabled(false);
-                    _declutter.SetEnabled(false);
-                    _remoteBudget.SetEnabled(false);
-                    _framePacing.SetEnabled(false);
-                    _compatibility.SetEnabled(false);
+                    SyncOptimizationFeatures(false);
                     return;
                 }
                 float now = Time.realtimeSinceStartup;
@@ -108,18 +111,20 @@ namespace TarkovPerformanceSuite
                     _configuration.OverlayEnabled.Value = _overlay.Visible;
                 }
 
+                if (_configuration.OptimizationsToggleKey.Value.IsDown())
+                {
+                    _configuration.OptimizationsEnabled.Value = !_configuration.OptimizationsEnabled.Value;
+                    Logger.LogWarning("A/B state changed: ALL OPTIMIZATIONS " + (_configuration.OptimizationsEnabled.Value ? "ON" : "OFF")
+                        + ". Allow several seconds for texture and frame-time transients to settle before comparing.");
+                    _overlay.Reset();
+                }
+
                 if (_configuration.DiagnosticReportKey.Value.IsDown()) ExportDiagnosticReport();
-                if (_configuration.ShadowEnabled.Value != _shadows.IsEnabled) _shadows.SetEnabled(_configuration.ShadowEnabled.Value);
-                if (_configuration.ShadowToggleKey.Value.IsDown()) _shadows.SetEnabled(!_shadows.IsEnabled);
-                if (_configuration.SkinningEnabled.Value != _skinning.IsEnabled) _skinning.SetEnabled(_configuration.SkinningEnabled.Value);
-                if (_configuration.SkinningToggleKey.Value.IsDown()) _skinning.SetEnabled(!_skinning.IsEnabled);
-                if (_configuration.AggressiveModeEnabled.Value != _aggressiveQuality.IsEnabled) _aggressiveQuality.SetEnabled(_configuration.AggressiveModeEnabled.Value);
-                if (_configuration.RemoteAiRenderLodEnabled.Value != _renderLod.IsEnabled) _renderLod.SetEnabled(_configuration.RemoteAiRenderLodEnabled.Value);
-                if (_configuration.CosmeticDeclutterEnabled.Value != _declutter.IsEnabled) _declutter.SetEnabled(_configuration.CosmeticDeclutterEnabled.Value);
-                if (_configuration.RemoteUpdateBudgetEnabled.Value != _remoteBudget.IsEnabled) _remoteBudget.SetEnabled(_configuration.RemoteUpdateBudgetEnabled.Value);
-                if (_configuration.FramePacingEnabled.Value != _framePacing.IsEnabled) _framePacing.SetEnabled(_configuration.FramePacingEnabled.Value);
-                if (_configuration.KnownModFixesEnabled.Value != _compatibility.IsEnabled) _compatibility.SetEnabled(_configuration.KnownModFixesEnabled.Value);
+                if (_configuration.ShadowToggleKey.Value.IsDown()) _configuration.ShadowEnabled.Value = !_configuration.ShadowEnabled.Value;
+                if (_configuration.SkinningToggleKey.Value.IsDown()) _configuration.SkinningEnabled.Value = !_configuration.SkinningEnabled.Value;
+                SyncOptimizationFeatures(_configuration.OptimizationsEnabled.Value);
                 _framePacing.Tick(now);
+                _cpuThreading.Tick(now);
                 _compatibility.Tick(now);
                 if (_lifecycle.State != RaidState.Started) return;
 
@@ -127,17 +132,22 @@ namespace TarkovPerformanceSuite
                 _timing.SetRuntimeEnabled(_configuration.MethodTimingEnabled.Value && (!_configuration.MethodTimingCaptureOnly.Value || _benchmark.IsCapturing));
 
                 double frameMs = Time.unscaledDeltaTime * 1000.0;
-                _entities.Tick(now);
+                _entities.Tick(now, _configuration.RemoteUpdateBudgetInterval.Value);
                 _fika.Tick(now);
                 _shadows.ObserveFrame(frameMs / 1000.0, _metrics.PreferredTimeMs("CPU Main Thread Frame Time", "PlayerLoop") ?? frameMs);
                 _shadows.Tick(now);
                 _skinning.Tick(now);
-                _renderLod.Tick(now);
                 _declutter.Tick();
                 _remoteBudget.Tick(now);
-                bool capturePressed = _configuration.CaptureKey.Value.IsDown() && !_benchmark.IsCapturing;
+                if (_configuration.CaptureKey.Value.IsDown())
+                    _configuration.ContinuousCaptureEnabled.Value = !_configuration.ContinuousCaptureEnabled.Value;
 
-                if (capturePressed)
+                if (!_configuration.ContinuousCaptureEnabled.Value && _benchmark.IsCapturing)
+                {
+                    _benchmark.Finish(false);
+                    ExportDiagnosticReport();
+                }
+                else if (_configuration.ContinuousCaptureEnabled.Value && !_benchmark.IsCapturing)
                 {
                     double duration = _configuration.Validated.CaptureSeconds;
                     _timing.ResetAggregates(now);
@@ -151,7 +161,8 @@ namespace TarkovPerformanceSuite
                     if (_overlay.Visible) _overlay.AddFrame(frameMs);
                 }
                 bool captureCompleted = _benchmark.IsCapturing && _benchmark.Record(now, frameMs, _metrics, _counts, _shadows.Counters,
-                    _skinning.Counters, _renderLod.Counters, _declutter.Counters, _remoteBudget.Counters, _compatibility.FastLookups, _fika.ServerFps);
+                    _skinning.Counters, default, _declutter.Counters, _remoteBudget.Counters, _pipScopes.Counters,
+                    _configuration.OptimizationsEnabled.Value, _compatibility.FastLookups, _fika.ServerFps);
                 if (captureCompleted) ExportDiagnosticReport();
                 _overlay.SuiteAverageMs = _suiteAverageMs;
                 if (_overlay.NeedsRefresh(now))
@@ -159,7 +170,9 @@ namespace TarkovPerformanceSuite
                     string methodText = _timing.GetOverlayText(now);
                     _overlay.DisplayMode = _configuration.OverlayDisplayMode.Value;
                     _overlay.PresetName = _configuration.Preset.Value.ToString();
-                    _overlay.OptimizationSummary = "Remote CPU: " + RemoteBudgetStatus() + "\nFrame pacing: " + _framePacing.StatusText + "\nCompatibility: " + _compatibility.StatusText;
+                    _overlay.OptimizationsActive = _configuration.OptimizationsEnabled.Value;
+                    _overlay.OptimizationSummary = "Remote CPU: " + RemoteBudgetStatus() + "\nCPU threads: " + _cpuThreading.StatusText + "\nPiP scope: " + PipScopeStatus()
+                        + "\nCombat presentation: " + _combatPresentation.StatusText + "\nFrame pacing: " + _framePacing.StatusText + "\nCompatibility: " + _compatibility.StatusText + "\nCombat logs: " + _hotLogs.StatusText;
                     _overlay.Refresh(now, _counts, _metrics, _fika, _benchmark, _lifecycle.State.ToString(), ExperimentStatus(), methodText);
                 }
             }
@@ -196,11 +209,14 @@ namespace TarkovPerformanceSuite
             _shadows?.Shutdown();
             _skinning?.Shutdown();
             _aggressiveQuality?.Shutdown();
-            _renderLod?.Shutdown();
             _declutter?.Shutdown();
             _remoteBudget?.Shutdown();
+            _cpuThreading?.Shutdown();
             _framePacing?.Shutdown();
             _compatibility?.Shutdown();
+            _hotLogs?.Shutdown();
+            _combatPresentation?.Shutdown();
+            _pipScopes?.Shutdown();
             Logger.LogInfo(PluginName + " shut down and released diagnostic resources.");
         }
 
@@ -213,12 +229,15 @@ namespace TarkovPerformanceSuite
             _shadows.OnRaidStarted();
             _skinning.OnRaidStarted();
             _aggressiveQuality.OnRaidStarted();
-            _renderLod.OnRaidStarted();
             _declutter.OnRaidStarted();
             _remoteBudget.OnRaidStarted();
+            _cpuThreading.OnRaidStarted();
             _framePacing.OnRaidStarted();
             _compatibility.SetWorld(world);
             _compatibility.OnRaidStarted();
+            _hotLogs.OnRaidStarted();
+            _combatPresentation.OnRaidStarted();
+            _pipScopes.OnRaidStarted();
             _overlay.Reset();
             _overlay.Visible = _configuration.OverlayEnabled.Value;
             try
@@ -236,11 +255,14 @@ namespace TarkovPerformanceSuite
             _shadows.OnRaidEnded();
             _skinning.OnRaidEnded();
             _aggressiveQuality.OnRaidEnded();
-            _renderLod.OnRaidEnded();
             _declutter.OnRaidEnded();
             _remoteBudget.OnRaidEnded();
+            _cpuThreading.OnRaidEnded();
             _framePacing.OnRaidEnded();
             _compatibility.OnRaidEnded();
+            _hotLogs.OnRaidEnded();
+            _combatPresentation.OnRaidEnded();
+            _pipScopes.OnRaidEnded();
             _benchmark.Finish(true);
             _metrics.Dispose();
             _entities.Clear();
@@ -253,7 +275,7 @@ namespace TarkovPerformanceSuite
         {
             try
             {
-                string benchmarkConfiguration = "durationSeconds=" + _configuration.Validated.CaptureSeconds + ";exportCsv=" + _configuration.ExportCsv.Value;
+                string benchmarkConfiguration = "durationSeconds=" + _configuration.Validated.CaptureSeconds + ";exportCsv=" + _configuration.ExportCsv.Value + ";continuous=" + _configuration.ContinuousCaptureEnabled.Value;
                 string methodSnapshot = _timing.GetDiagnosticSnapshot(Time.realtimeSinceStartup);
                 string path = DiagnosticReport.Write(Path.Combine(_outputRoot, "diagnostics"), _runtime, _metrics, _counts, _exceptions, FeatureState() + ";" + ExperimentStatus(), benchmarkConfiguration, _timing.PatchReport, methodSnapshot, _suiteAverageMs);
                 Logger.LogInfo("Diagnostic report exported: " + path);
@@ -268,15 +290,18 @@ namespace TarkovPerformanceSuite
         private string FeatureState()
         {
             return "RemoteCharacterShadowLOD=" + (_shadows != null && _shadows.IsEnabled ? "enabled" : "disabled")
-                + ";ShadowDryRun=" + _configuration.ShadowDryRun.Value
                 + ";OffscreenSkinning=" + (_skinning != null && _skinning.IsEnabled ? "enabled" : "disabled")
-                + ";SkinningDryRun=" + _configuration.SkinningDryRun.Value
                 + ";AggressiveQuality=" + (_aggressiveQuality != null && _aggressiveQuality.IsEnabled ? "enabled" : "disabled")
-                + ";RemoteAiRenderLod=" + (_renderLod != null && _renderLod.IsEnabled ? "enabled" : "disabled")
                 + ";CosmeticDeclutter=" + (_declutter != null && _declutter.IsEnabled ? "enabled" : "disabled")
                 + ";RemoteCpuBudget=" + (_remoteBudget != null && _remoteBudget.IsEnabled ? "enabled" : "disabled")
+                + ";AllLogicalProcessors=" + (_cpuThreading != null && _cpuThreading.IsEnabled ? "enabled" : "disabled")
                 + ";FramePacing=" + (_framePacing != null && _framePacing.IsEnabled ? "enabled" : "disabled")
                 + ";KnownModFixes=" + (_compatibility != null && _compatibility.IsEnabled ? "enabled" : "disabled")
+                + ";CombatLogSuppression=" + (_hotLogs != null && _hotLogs.IsEnabled ? "enabled" : "disabled")
+                + ";CombatPresentation=" + (_combatPresentation != null && _combatPresentation.IsEnabled ? "enabled" : "disabled")
+                + ";PipScopeBudget=" + (_pipScopes != null && _pipScopes.IsEnabled ? "enabled" : "disabled")
+                + ";AllOptimizations=" + (_configuration.OptimizationsEnabled.Value ? "ON" : "OFF")
+                + ";ContinuousCapture=" + _configuration.ContinuousCaptureEnabled.Value
                 + ";Preset=" + _configuration.Preset.Value;
         }
 
@@ -292,14 +317,6 @@ namespace TarkovPerformanceSuite
             return _skinning.StatusText + " | AI " + counters.RegisteredAi + " offscreen " + counters.OffscreenAi + " candidates " + counters.CandidateRenderers + " changed " + counters.ModifiedRenderers + " cost " + counters.AverageMs.ToString("F3") + " ms";
         }
 
-        private string RenderLodStatus()
-        {
-            RemoteRenderLodCounters counters = _renderLod.Counters;
-            return _renderLod.StatusText + " | AI " + counters.RegisteredAi + " mid " + counters.MidTierAi + " far " + counters.FarTierAi
-                + " | LODs " + counters.ForcedLodGroups + " skins " + counters.ModifiedSkinnedRenderers + " renderers " + counters.ModifiedRenderers
-                + " | cost " + counters.AverageMs.ToString("F3") + " ms";
-        }
-
         private string DeclutterStatus()
         {
             DeclutterCounters counters = _declutter.Counters;
@@ -312,17 +329,26 @@ namespace TarkovPerformanceSuite
             RemoteUpdateBudgetCounters counters = _remoteBudget.Counters;
             return _remoteBudget.StatusText + " | remote " + counters.RemoteCharacters + " hidden " + counters.HiddenCharacters + " budgeted " + counters.BudgetedCharacters
                 + " animators " + counters.CulledAnimators + " skipped props " + counters.SkippedPropUpdates + " triggers " + counters.SkippedTriggerSearches
+                + " presentation " + counters.SkippedPresentationUpdates
                 + " | cost " + counters.AverageMs.ToString("F3") + " ms";
+        }
+
+        private string PipScopeStatus()
+        {
+            return _pipScopes.StatusText;
         }
 
         private string ExperimentStatus() => "Shadows: " + ShadowStatus()
             + "\nOffscreen skinning: " + SkinningStatus()
             + "\nAggressive quality: " + _aggressiveQuality.StatusText
-            + "\nRemote render LOD: " + RenderLodStatus()
             + "\nDeclutter: " + DeclutterStatus()
             + "\nRemote CPU budget: " + RemoteBudgetStatus()
+            + "\nCPU threads: " + _cpuThreading.StatusText
+            + "\nPiP scope camera: " + PipScopeStatus()
+            + "\nCombat presentation: " + _combatPresentation.StatusText
             + "\nFrame pacing: " + _framePacing.StatusText
-            + "\nCompatibility: " + _compatibility.StatusText;
+            + "\nCompatibility: " + _compatibility.StatusText
+            + "\nCombat logs: " + _hotLogs.StatusText;
 
         private void ApplyPresetIfChanged()
         {
@@ -334,30 +360,65 @@ namespace TarkovPerformanceSuite
             _configuration.FramePacingEnabled.Value = true;
             _configuration.RemoteUpdateBudgetEnabled.Value = true;
             _configuration.RemoteAnimatorCullingEnabled.Value = true;
-            _configuration.AggressiveModeEnabled.Value = false;
-            _configuration.RemoteAiRenderLodEnabled.Value = false;
-            _configuration.SkinningEnabled.Value = false;
+            _configuration.RemotePresentationBudgetEnabled.Value = true;
+            _configuration.UseAllLogicalProcessors.Value = true;
+            _configuration.HotPathLogSuppressionEnabled.Value = true;
+            _configuration.CombatPresentationEnabled.Value = true;
+            _configuration.AggressiveModeEnabled.Value = true;
+            _configuration.SkinningEnabled.Value = true;
+            _configuration.ShadowEnabled.Value = true;
+            _configuration.CosmeticDeclutterEnabled.Value = true;
+            _configuration.PipScopeOptimizationEnabled.Value = true;
+            _configuration.OptimizationsEnabled.Value = true;
 
             if (_lastPreset == PerformancePreset.Balanced)
             {
+                _configuration.RemoteUpdateBudgetInterval.Value = 0.1f;
                 _configuration.RemoteUpdateBudgetDistance.Value = 60f;
                 _configuration.RemoteUpdateBudgetHold.Value = 0.3f;
                 _configuration.RemoteUpdateBudgetDivisor.Value = 2;
-                _configuration.ShadowEnabled.Value = false;
-                _configuration.CosmeticDeclutterEnabled.Value = false;
+                _configuration.ShadowDistance.Value = 100f;
+                _configuration.ShadowMinimumDistance.Value = 60f;
+                _configuration.PipScopeResolutionScale.Value = 0.75f;
             }
             else if (_lastPreset == PerformancePreset.OldCpuAggressive)
             {
-                _configuration.RemoteUpdateBudgetDistance.Value = 35f;
-                _configuration.RemoteUpdateBudgetHold.Value = 0.15f;
-                _configuration.RemoteUpdateBudgetDivisor.Value = 4;
-                _configuration.ShadowEnabled.Value = true;
-                _configuration.ShadowDistance.Value = 80f;
-                _configuration.ShadowMinimumDistance.Value = 45f;
-                _configuration.ShadowTargetFps.Value = 50f;
-                _configuration.CosmeticDeclutterEnabled.Value = true;
+                _configuration.RemoteUpdateBudgetInterval.Value = 0.1f;
+                _configuration.RemoteUpdateBudgetDistance.Value = 25f;
+                _configuration.RemoteUpdateBudgetHold.Value = 0.1f;
+                _configuration.RemoteUpdateBudgetDivisor.Value = 8;
+                _configuration.ShadowDistance.Value = 50f;
+                _configuration.ShadowMinimumDistance.Value = 25f;
+                _configuration.ShadowTargetFps.Value = 45f;
+                _configuration.PipScopeResolutionScale.Value = 0.5f;
             }
-            Logger?.LogInfo("Applied performance preset: " + _lastPreset + ". LOD and texture quality changes remain disabled.");
+            Logger?.LogInfo("Applied performance preset: " + _lastPreset + ". All optimization features are enabled; unsafe LOD overrides remain removed.");
+        }
+
+        private void SyncOptimizationFeatures(bool masterEnabled)
+        {
+            SyncFeature(_configuration.ShadowEnabled, _shadows.IsEnabled, _shadows.IsAvailable, masterEnabled, _shadows.SetEnabled);
+            SyncFeature(_configuration.SkinningEnabled, _skinning.IsEnabled, _skinning.IsAvailable, masterEnabled, _skinning.SetEnabled);
+            SyncFeature(_configuration.AggressiveModeEnabled, _aggressiveQuality.IsEnabled, _aggressiveQuality.IsAvailable, masterEnabled, _aggressiveQuality.SetEnabled);
+            SyncFeature(_configuration.CosmeticDeclutterEnabled, _declutter.IsEnabled, _declutter.IsAvailable, masterEnabled, _declutter.SetEnabled);
+            SyncFeature(_configuration.RemoteUpdateBudgetEnabled, _remoteBudget.IsEnabled, _remoteBudget.IsAvailable, masterEnabled, _remoteBudget.SetEnabled);
+            SyncFeature(_configuration.UseAllLogicalProcessors, _cpuThreading.IsEnabled, _cpuThreading.IsAvailable, masterEnabled, _cpuThreading.SetEnabled);
+            SyncFeature(_configuration.FramePacingEnabled, _framePacing.IsEnabled, _framePacing.IsAvailable, masterEnabled, _framePacing.SetEnabled);
+            SyncFeature(_configuration.KnownModFixesEnabled, _compatibility.IsEnabled, _compatibility.IsAvailable, masterEnabled, _compatibility.SetEnabled);
+            SyncFeature(_configuration.HotPathLogSuppressionEnabled, _hotLogs.IsEnabled, _hotLogs.IsAvailable, masterEnabled, _hotLogs.SetEnabled);
+            SyncFeature(_configuration.CombatPresentationEnabled, _combatPresentation.IsEnabled, _combatPresentation.IsAvailable, masterEnabled, _combatPresentation.SetEnabled);
+            SyncFeature(_configuration.PipScopeOptimizationEnabled, _pipScopes.IsEnabled, _pipScopes.IsAvailable, masterEnabled, _pipScopes.SetEnabled);
+        }
+
+        private static void SyncFeature(ConfigEntry<bool> configuredEntry, bool current, bool available, bool masterEnabled, Action<bool> setEnabled)
+        {
+            bool configured = configuredEntry.Value;
+            bool desired = masterEnabled && configured;
+            if (desired == current || (desired && !available)) return;
+            setEnabled(desired);
+            // Feature classes also expose standalone F12 toggles and therefore write their own
+            // entry. Preserve the user's configured preference while the runtime A/B master is off.
+            configuredEntry.Value = configured;
         }
 
         private static string ReadMapName(GameWorld world)

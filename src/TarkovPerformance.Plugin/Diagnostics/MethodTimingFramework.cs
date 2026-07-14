@@ -5,10 +5,12 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using BepInEx.Bootstrap;
 using BepInEx.Logging;
 using EFT;
 using HarmonyLib;
 using TarkovPerformanceSuite.Utilities;
+using UnityEngine;
 
 namespace TarkovPerformanceSuite.RuntimeDiagnostics
 {
@@ -73,10 +75,10 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         private static int _patchFailures;
         private static volatile bool _circuitOpen;
 
-        private readonly List<MethodTimingTarget> _targets = new List<MethodTimingTarget>(24);
+        private readonly List<MethodTimingTarget> _targets = new List<MethodTimingTarget>(128);
         private readonly StringBuilder _overlayBuilder = new StringBuilder(1024);
         private readonly StringBuilder _reportBuilder = new StringBuilder(4096);
-        private readonly MethodTimingTarget[] _sortBuffer = new MethodTimingTarget[32];
+        private readonly MethodTimingTarget[] _sortBuffer = new MethodTimingTarget[128];
         private readonly ManualLogSource _logger;
         private readonly Harmony _harmony = new Harmony(HarmonyId);
         private string _overlayText = string.Empty;
@@ -105,9 +107,21 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             AddTarget(typeof(PlayerBody), "UpdatePlayerRenders", typeof(void), new[] { typeof(EPointOfView), typeof(EPlayerSide) }, "EFT.PlayerBody.UpdatePlayerRenders");
             AddTarget(typeof(PlayerBody), "IsVisible", typeof(bool), Type.EmptyTypes, "EFT.PlayerBody.IsVisible");
             AddTarget(typeof(GameWorld), "Update", typeof(void), Type.EmptyTypes, "EFT.GameWorld.Update");
+            AddTarget(typeof(GameWorldUnityTickListener), "Update", typeof(void), Type.EmptyTypes, "EFT.WorldTickListener.Update");
+            AddTarget(typeof(GameWorldUnityTickListener), "FixedUpdate", typeof(void), Type.EmptyTypes, "EFT.WorldTickListener.FixedUpdate");
+            AddTarget(typeof(GameWorldUnityTickListener), "LateUpdate", typeof(void), Type.EmptyTypes, "EFT.WorldTickListener.LateUpdate");
+            AddTarget(typeof(GameWorld), "DoWorldTick", typeof(void), new[] { typeof(float) }, "EFT.GameWorld.DoWorldTick");
+            AddTarget(typeof(GameWorld), "DoOtherWorldTick", typeof(void), new[] { typeof(float) }, "EFT.GameWorld.DoOtherWorldTick");
+            AddTarget(typeof(GameWorld), "BeforeWorldTick", typeof(void), new[] { typeof(float) }, "EFT.GameWorld.BeforeWorldTick");
+            AddTarget(typeof(GameWorld), "PlayerTick", typeof(void), new[] { typeof(float) }, "EFT.GameWorld.PlayerTick");
+            AddTarget(typeof(GameWorld), "BallisticsTick", typeof(void), new[] { typeof(float) }, "EFT.GameWorld.BallisticsTick");
+            AddTarget(typeof(GameWorld), "AfterPlayerTick", typeof(void), new[] { typeof(float) }, "EFT.GameWorld.AfterPlayerTick");
+            AddTarget(typeof(GameWorld), "OtherElseWorldTick", typeof(void), new[] { typeof(float) }, "EFT.GameWorld.OtherElseWorldTick");
+            AddTarget(typeof(GameWorld), "AfterWorldTick", typeof(void), new[] { typeof(float) }, "EFT.GameWorld.AfterWorldTick");
             AddTarget(typeof(GameWorld), "LateUpdateWorld", typeof(void), new[] { typeof(float) }, "EFT.GameWorld.LateUpdateWorld");
             AddTarget(typeof(Player), "UpdateTick", typeof(void), Type.EmptyTypes, "EFT.Player.UpdateTick");
             AddTarget(typeof(Player), "FixedUpdateTick", typeof(void), Type.EmptyTypes, "EFT.Player.FixedUpdateTick");
+            AddTarget(typeof(Player), "AfterMainTick", typeof(void), Type.EmptyTypes, "EFT.Player.AfterMainTick");
             AddTarget(typeof(Player), "LateUpdate", typeof(void), Type.EmptyTypes, "EFT.Player.LateUpdate");
             AddTarget(typeof(Player), "VisualPass", typeof(void), Type.EmptyTypes, "EFT.Player.VisualPass");
             AddTarget(typeof(Player), "ComplexUpdate", typeof(void), new[] { typeof(EUpdateQueue), typeof(float) }, "EFT.Player.ComplexUpdate");
@@ -118,7 +132,10 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             AddTarget(typeof(Player), "FBBIKUpdate", typeof(void), new[] { typeof(float) }, "EFT.Player.FBBIKUpdate");
             AddTarget(typeof(Player), "PropUpdate", typeof(void), Type.EmptyTypes, "EFT.Player.PropUpdate");
             AddTarget(typeof(BasePhysicalClass), "LateUpdate", typeof(void), Type.EmptyTypes, "EFT.BasePhysicalClass.LateUpdate");
+            AddWorldPresentationTargets();
             AddOptionalFikaTargets();
+            AddAudioTargets();
+            AddInstalledPluginFrameTargets();
             _active = _targets.Count > 0;
             _patchReport = _reportBuilder.ToString();
             _logger.LogInfo($"Method timing enabled: {_targets.Count} verified targets patched. No invocation-level logging is performed.");
@@ -233,6 +250,52 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             AddTarget(fikaPlayer, "ManualUpdate", typeof(void), new[] { typeof(float), typeof(float?), typeof(int) }, "FikaPlayer.ManualUpdate");
         }
 
+        private void AddWorldPresentationTargets()
+        {
+            Assembly game = typeof(Player).Assembly;
+            AddTarget(typeof(Shell), "ActivatePhysics", typeof(void), new[] { typeof(Vector3), typeof(Vector3), typeof(Vector3), typeof(Vector3) }, "EFT.Shell.ActivatePhysics");
+            AddTarget(typeof(Shell), "Update", typeof(void), Type.EmptyTypes, "EFT.Shell.Update");
+            AddTarget(game.GetType("BulletSoundPlayersController", false), "Update", typeof(void), Type.EmptyTypes, "EFT.BulletSoundPlayersController.Update");
+            AddTarget(game.GetType("CullingManager", false), "Update", typeof(void), Type.EmptyTypes, "EFT.CullingManager.Update");
+            AddTarget(game.GetType("DistantShadow", false), "Update", typeof(void), Type.EmptyTypes, "EFT.DistantShadow.Update");
+            AddTarget(game.GetType("EffectsController", false), "Update", typeof(void), Type.EmptyTypes, "EFT.EffectsController.Update");
+            AddTarget(game.GetType("Diz.Jobs.JobScheduler", false), "LateUpdate", typeof(void), Type.EmptyTypes, "EFT.JobScheduler.LateUpdate");
+        }
+
+        private void AddAudioTargets()
+        {
+            Assembly game = typeof(Player).Assembly;
+            AddTarget(game.GetType("BetterAudio", false), "Update", typeof(void), Type.EmptyTypes, "Audio.BetterAudio.Update");
+            AddTarget(game.GetType("Audio.SpatialSystem.SpatialAudioSystem", false), "Update", typeof(void), Type.EmptyTypes, "Audio.SpatialAudioSystem.Update");
+            AddTarget(game.GetType("Audio.SpatialSystem.SpatialAudioSystem", false), "LateUpdate", typeof(void), Type.EmptyTypes, "Audio.SpatialAudioSystem.LateUpdate");
+            AddTarget(game.GetType("Audio.AmbientSubsystem.AmbientAudioSystem", false), "Update", typeof(void), Type.EmptyTypes, "Audio.AmbientAudioSystem.Update");
+            AddTarget(game.GetType("Audio.AmbientSubsystem.AmbientAudioSystem", false), "LateUpdate", typeof(void), Type.EmptyTypes, "Audio.AmbientAudioSystem.LateUpdate");
+            AddTarget(game.GetType("BaseSoundPlayer", false), "Update", typeof(void), Type.EmptyTypes, "Audio.BaseSoundPlayer.Update");
+        }
+
+        private void AddInstalledPluginFrameTargets()
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            string[] frameMethods = { "Update", "LateUpdate", "FixedUpdate", "OnGUI" };
+            int found = 0;
+            foreach (KeyValuePair<string, BepInEx.PluginInfo> pair in Chainloader.PluginInfos)
+            {
+                BepInEx.PluginInfo info = pair.Value;
+                object instance = info?.Instance;
+                if (instance == null || instance is Plugin) continue;
+                Type type = instance.GetType();
+                for (int i = 0; i < frameMethods.Length; i++)
+                {
+                    MethodInfo method = type.GetMethod(frameMethods[i], flags, null, Type.EmptyTypes, null);
+                    if (method == null || method.ReturnType != typeof(void) || method.IsAbstract) continue;
+                    string guid = info.Metadata?.GUID ?? type.Assembly.GetName().Name;
+                    AddTarget(method, "Mod[" + guid + "]." + frameMethods[i]);
+                    found++;
+                }
+            }
+            _reportBuilder.AppendLine("Installed-plugin frame methods discovered: " + found + ". Nested timings are diagnostic and must not be added together.");
+        }
+
         private void AddTarget(Type type, string methodName, Type expectedReturn, Type[] parameters, string displayName)
         {
             if (type == null) { _reportBuilder.AppendLine(displayName + ": type not found; skipped."); return; }
@@ -243,6 +306,16 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                 return;
             }
 
+            AddTarget(method, displayName);
+        }
+
+        private void AddTarget(MethodInfo method, string displayName)
+        {
+            if (Lookup.ContainsKey(method))
+            {
+                _reportBuilder.AppendLine(displayName + ": duplicate method target; skipped.");
+                return;
+            }
             try
             {
                 Patches existing = Harmony.GetPatchInfo(method);

@@ -69,7 +69,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             _nextCycle = 0;
         }
 
-        internal void Tick(float now)
+        internal void Tick(float now, float snapshotInterval)
         {
             if (_world == null || _world.RegisteredPlayers == null) return;
             if (_cursor != 0 || now >= _nextCycle)
@@ -92,7 +92,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             }
             if (now >= _nextSnapshotRefresh)
             {
-                _nextSnapshotRefresh = now + 0.05f;
+                _nextSnapshotRefresh = now + Clamp(snapshotInterval, 0.05f, 0.25f);
                 RefreshSnapshots();
             }
         }
@@ -228,6 +228,9 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 if (pair.Value.Player == null || pair.Value.SeenGeneration != _generation) _removeBuffer.Add(pair.Key);
             for (int i = 0; i < _removeBuffer.Count; i++) _entities.Remove(_removeBuffer[i]);
         }
+
+        private static float Clamp(float value, float minimum, float maximum)
+            => float.IsNaN(value) || float.IsInfinity(value) ? minimum : value < minimum ? minimum : value > maximum ? maximum : value;
     }
 
     internal static class RuntimeEntityClassifier

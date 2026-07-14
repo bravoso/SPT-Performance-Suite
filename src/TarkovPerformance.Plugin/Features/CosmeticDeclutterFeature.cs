@@ -37,7 +37,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private int _candidates;
         private bool _raidActive;
         private bool _scanRequested;
-        private bool _lastDryRun;
         private double _discoveryMs;
         private double _averageBatchMs;
         private DeclutterCounters _counters;
@@ -48,11 +47,10 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         public string Name => "Cosmetic Declutter";
         public bool IsAvailable => !_breaker.IsOpen;
         public bool IsEnabled { get; private set; }
-        internal bool DryRun => _configuration.CosmeticDeclutterDryRun.Value;
         internal DeclutterCounters Counters => _counters;
-        internal string StatusText => IsEnabled ? (DryRun ? "enabled (dry-run)" : "enabled") : _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
+        internal string StatusText => IsEnabled ? "enabled" : _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
 
-        public void Initialize() { _breaker.Reset(); _lastDryRun = DryRun; SetEnabled(_configuration.CosmeticDeclutterEnabled.Value); }
+        public void Initialize() { _breaker.Reset(); SetEnabled(_configuration.CosmeticDeclutterEnabled.Value); }
         public void OnRaidStarted() { _raidActive = true; RequestScan(); }
         public void OnRaidEnded() { _raidActive = false; RestoreAll(); ClearScan(); }
 
@@ -64,7 +62,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             _configuration.CosmeticDeclutterEnabled.Value = enabled;
             if (enabled && _raidActive) RequestScan();
             if (!enabled) { RestoreAll(); ClearScan(); }
-            _logger.LogInfo(Name + " " + (enabled ? "enabled" : "disabled") + "; dry-run=" + DryRun + ".");
+            _logger.LogInfo(Name + " " + (enabled ? "enabled" : "disabled") + ".");
         }
 
         public void Shutdown() { _raidActive = false; IsEnabled = false; RestoreAll(); ClearScan(); }
@@ -72,12 +70,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         internal void Tick()
         {
             if (!IsEnabled || !_raidActive) return;
-            if (DryRun != _lastDryRun)
-            {
-                RestoreAll();
-                _lastDryRun = DryRun;
-                RequestScan();
-            }
             try
             {
                 if (_scanRequested) Discover();
@@ -117,7 +109,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 Renderer renderer = _scan[_cursor++];
                 if (!IsCandidate(renderer)) continue;
                 _candidates++;
-                if (!DryRun && !_originalStates.ContainsKey(renderer))
+                if (!_originalStates.ContainsKey(renderer))
                 {
                     _originalStates.Add(renderer, renderer.forceRenderingOff);
                     renderer.forceRenderingOff = true;
@@ -126,7 +118,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             double elapsed = (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
             _averageBatchMs = _averageBatchMs == 0 ? elapsed : (_averageBatchMs * 0.9) + (elapsed * 0.1);
             bool complete = _cursor >= _scan.Length;
-            _counters = new DeclutterCounters(_cursor, _candidates, DryRun ? 0 : _originalStates.Count, complete, _discoveryMs, _averageBatchMs);
+            _counters = new DeclutterCounters(_cursor, _candidates, _originalStates.Count, complete, _discoveryMs, _averageBatchMs);
             if (complete) _scan = Array.Empty<Renderer>();
         }
 

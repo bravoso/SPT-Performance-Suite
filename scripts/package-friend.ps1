@@ -8,7 +8,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $paths = & (Join-Path $PSScriptRoot 'Resolve-SptPaths.ps1') -ReferenceRoot $ReferenceRoot
 & (Join-Path $PSScriptRoot 'build.ps1') -ReferenceRoot $paths.ReferenceRoot -Configuration $Configuration
 
-$version = '0.4.0'
+$version = '0.8.0'
 $stage = Join-Path $repo "artifacts\TarkovPerformanceSuite-$version-OldCPU"
 $zip = "$stage.zip"
 $pluginDestination = Join-Path $stage 'BepInEx\plugins\TarkovPerformanceSuite'

@@ -41,7 +41,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private readonly List<SkinnedMeshRenderer> _restoreBuffer = new List<SkinnedMeshRenderer>(64);
         private readonly List<int> _entityRemoveBuffer = new List<int>(16);
         private bool _raidActive;
-        private bool _lastDryRun;
         private float _nextUpdate;
         private double _averageMs;
         private SkinningFeatureCounters _counters;
@@ -57,14 +56,12 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         public string Name => "Remote AI Offscreen Skinning";
         public bool IsAvailable => !_breaker.IsOpen;
         public bool IsEnabled { get; private set; }
-        internal bool DryRun => _configuration.SkinningDryRun.Value;
         internal SkinningFeatureCounters Counters => _counters;
-        internal string StatusText => IsEnabled ? (DryRun ? "enabled (dry-run)" : "enabled") : _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
+        internal string StatusText => IsEnabled ? "enabled" : _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
 
         public void Initialize()
         {
             _breaker.Reset();
-            _lastDryRun = DryRun;
             SetEnabled(_configuration.SkinningEnabled.Value);
         }
 
@@ -91,7 +88,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             IsEnabled = enabled;
             _configuration.SkinningEnabled.Value = enabled;
             if (!enabled) RestoreAll();
-            _logger.LogInfo($"Remote AI Offscreen Skinning {(enabled ? "enabled" : "disabled")}; dry-run={DryRun}. Only confirmed remote AI can be considered.");
+            _logger.LogInfo($"Remote AI Offscreen Skinning {(enabled ? "enabled" : "disabled")}. Only confirmed remote AI can be considered.");
         }
 
         public void Shutdown()
@@ -106,12 +103,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             if (!IsEnabled || !_raidActive || now < _nextUpdate) return;
             ValidatedConfiguration configuration = _configuration.Validated;
             _nextUpdate = now + (float)configuration.SkinningUpdateIntervalSeconds;
-            if (DryRun != _lastDryRun)
-            {
-                if (DryRun) RestoreAll();
-                _lastDryRun = DryRun;
-            }
-
             long started = Stopwatch.GetTimestamp();
             try
             {
@@ -182,7 +173,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                     if (_originalStates.ContainsKey(renderer)) { candidates++; continue; }
                     if (!renderer.updateWhenOffscreen) continue;
                     candidates++;
-                    if (DryRun) continue;
                     _originalStates.Add(renderer, true);
                     renderer.updateWhenOffscreen = false;
                 }
@@ -190,7 +180,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
             RestoreNoLongerTracked();
             RemoveUnseenEntities();
-            _counters = new SkinningFeatureCounters(ai, offscreenAi, candidates, DryRun ? 0 : _originalStates.Count, _averageMs);
+            _counters = new SkinningFeatureCounters(ai, offscreenAi, candidates, _originalStates.Count, _averageMs);
         }
 
         private static bool IsVisible(Renderer[] renderers)

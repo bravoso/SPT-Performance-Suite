@@ -14,7 +14,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 {
     internal readonly struct RemoteUpdateBudgetCounters
     {
-        internal RemoteUpdateBudgetCounters(int remote, int hidden, int budgeted, int animators, long skippedProps, long skippedTriggers, double averageMs)
+        internal RemoteUpdateBudgetCounters(int remote, int hidden, int budgeted, int animators, long skippedProps, long skippedTriggers, long skippedPresentation, double averageMs)
         {
             RemoteCharacters = remote;
             HiddenCharacters = hidden;
@@ -22,6 +22,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             CulledAnimators = animators;
             SkippedPropUpdates = skippedProps;
             SkippedTriggerSearches = skippedTriggers;
+            SkippedPresentationUpdates = skippedPresentation;
             AverageMs = averageMs;
         }
 
@@ -31,12 +32,14 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         internal int CulledAnimators { get; }
         internal long SkippedPropUpdates { get; }
         internal long SkippedTriggerSearches { get; }
+        internal long SkippedPresentationUpdates { get; }
         internal double AverageMs { get; }
     }
 
     internal sealed class RemoteUpdateBudgetFeature : IPerformanceFeature
     {
         private static RemoteUpdateBudgetFeature _instance;
+        [ThreadStatic] private static int _allowedComplexLatePlayerId;
         private readonly ManualLogSource _logger;
         private readonly PluginConfiguration _configuration;
         private readonly EntityRegistry _registry;
@@ -47,6 +50,10 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private readonly Dictionary<int, float> _hiddenSince = new Dictionary<int, float>(64);
         private readonly Dictionary<int, int> _propCallCounters = new Dictionary<int, int>(64);
         private readonly Dictionary<int, int> _triggerCallCounters = new Dictionary<int, int>(64);
+        private readonly Dictionary<int, int> _armsCallCounters = new Dictionary<int, int>(64);
+        private readonly Dictionary<int, int> _bodyCallCounters = new Dictionary<int, int>(64);
+        private readonly Dictionary<int, int> _ikCallCounters = new Dictionary<int, int>(64);
+        private readonly Dictionary<int, int> _complexLateCallCounters = new Dictionary<int, int>(64);
         private readonly Dictionary<Animator, AnimatorCullingMode> _animatorStates = new Dictionary<Animator, AnimatorCullingMode>(256);
         private readonly HashSet<Animator> _seenAnimators = new HashSet<Animator>();
         private readonly List<Animator> _animatorRestore = new List<Animator>(64);
@@ -54,11 +61,18 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private Harmony _harmony;
         private MethodInfo _propUpdate;
         private MethodInfo _triggerSearch;
+        private MethodInfo _armsUpdate;
+        private MethodInfo _bodyUpdate;
+        private MethodInfo _fbbikUpdate;
+        private MethodInfo _complexLateUpdate;
+        private MethodInfo _observedVisualPass;
+        private MethodInfo _observedFbbikUpdate;
         private bool _raidActive;
         private bool _patchesInstalled;
         private float _nextUpdate;
         private long _skippedProps;
         private long _skippedTriggers;
+        private long _skippedPresentation;
         private double _averageMs;
         private RemoteUpdateBudgetCounters _counters;
 
@@ -88,10 +102,12 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         public void OnRaidStarted()
         {
+            InstallOptionalFikaPatches();
             _raidActive = true;
             _nextUpdate = 0;
             _skippedProps = 0;
             _skippedTriggers = 0;
+            _skippedPresentation = 0;
             _counters = default;
         }
 
@@ -121,6 +137,24 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             {
                 if (_propUpdate != null) _harmony.Unpatch(_propUpdate, HarmonyPatchType.Prefix, _harmony.Id);
                 if (_triggerSearch != null) _harmony.Unpatch(_triggerSearch, HarmonyPatchType.Prefix, _harmony.Id);
+                if (_armsUpdate != null) _harmony.Unpatch(_armsUpdate, HarmonyPatchType.Prefix, _harmony.Id);
+                if (_bodyUpdate != null) _harmony.Unpatch(_bodyUpdate, HarmonyPatchType.Prefix, _harmony.Id);
+                if (_fbbikUpdate != null) _harmony.Unpatch(_fbbikUpdate, HarmonyPatchType.Prefix, _harmony.Id);
+                if (_complexLateUpdate != null)
+                {
+                    _harmony.Unpatch(_complexLateUpdate, HarmonyPatchType.Prefix, _harmony.Id);
+                    _harmony.Unpatch(_complexLateUpdate, HarmonyPatchType.Postfix, _harmony.Id);
+                }
+                if (_observedVisualPass != null)
+                {
+                    _harmony.Unpatch(_observedVisualPass, HarmonyPatchType.Prefix, _harmony.Id);
+                    _harmony.Unpatch(_observedVisualPass, HarmonyPatchType.Postfix, _harmony.Id);
+                }
+                if (_observedFbbikUpdate != null)
+                {
+                    _harmony.Unpatch(_observedFbbikUpdate, HarmonyPatchType.Prefix, _harmony.Id);
+                    _harmony.Unpatch(_observedFbbikUpdate, HarmonyPatchType.Postfix, _harmony.Id);
+                }
             }
             _patchesInstalled = false;
             if (ReferenceEquals(_instance, this)) _instance = null;
@@ -178,6 +212,10 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                     _budgetedIds.Remove(id);
                     _propCallCounters.Remove(id);
                     _triggerCallCounters.Remove(id);
+                    _armsCallCounters.Remove(id);
+                    _bodyCallCounters.Remove(id);
+                    _ikCallCounters.Remove(id);
+                    _complexLateCallCounters.Remove(id);
                     RestoreAnimators(entity.Animators);
                     continue;
                 }
@@ -203,24 +241,38 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             }
 
             RestoreNoLongerEligible();
-            _counters = new RemoteUpdateBudgetCounters(remote, hidden, _budgetedIds.Count, _animatorStates.Count, _skippedProps, _skippedTriggers, _averageMs);
+            _counters = new RemoteUpdateBudgetCounters(remote, hidden, _budgetedIds.Count, _animatorStates.Count, _skippedProps, _skippedTriggers, _skippedPresentation, _averageMs);
         }
 
-        private bool ShouldRun(Player player, bool propUpdate)
+        private bool ShouldRun(Player player, BudgetedUpdate update)
         {
             if (!IsEnabled || !_raidActive || player == null) return true;
+            // ComplexLateUpdate contains presentation sub-passes on some EFT builds. If its
+            // outer budget allowed this player, do not divide nested arms/body/IK a second time.
+            if (update != BudgetedUpdate.ComplexLate && _allowedComplexLatePlayerId == player.GetInstanceID()) return true;
+            // Never wait for the amortized registry refresh when EFT/Fika has already
+            // promoted the character to visible this frame.
+            if (player.IsVisible) return true;
+            if (update >= BudgetedUpdate.Arms && !_configuration.RemotePresentationBudgetEnabled.Value) return true;
+            if (update == BudgetedUpdate.ComplexLate && !_configuration.RemoteComplexLateUpdateBudgetEnabled.Value) return true;
             int id = player.GetInstanceID();
             if (!_budgetedIds.Contains(id)) return true;
             int divisor = Clamp(_configuration.RemoteUpdateBudgetDivisor.Value, 2, 8);
-            Dictionary<int, int> counters = propUpdate ? _propCallCounters : _triggerCallCounters;
+            Dictionary<int, int> counters = update == BudgetedUpdate.Prop ? _propCallCounters
+                : update == BudgetedUpdate.Trigger ? _triggerCallCounters
+                : update == BudgetedUpdate.Arms ? _armsCallCounters
+                : update == BudgetedUpdate.Body || update == BudgetedUpdate.ObservedVisual ? _bodyCallCounters
+                : update == BudgetedUpdate.Ik || update == BudgetedUpdate.ObservedIk ? _ikCallCounters
+                : _complexLateCallCounters;
             counters.TryGetValue(id, out int calls);
             calls++;
             bool run = calls >= divisor;
             counters[id] = run ? 0 : calls;
             if (!run)
             {
-                if (propUpdate) _skippedProps++;
-                else _skippedTriggers++;
+                if (update == BudgetedUpdate.Prop) _skippedProps++;
+                else if (update == BudgetedUpdate.Trigger) _skippedTriggers++;
+                else _skippedPresentation++;
             }
             return run;
         }
@@ -232,12 +284,28 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 _harmony = new Harmony("com.lucaswilluweit.tarkovperformancesuite.remote-update-budget");
                 _propUpdate = AccessTools.Method(typeof(Player), nameof(Player.PropUpdate));
                 _triggerSearch = AccessTools.Method(typeof(Player), nameof(Player.UpdateTriggerColliderSearcher), new[] { typeof(float), typeof(bool) });
+                _armsUpdate = AccessTools.Method(typeof(Player), nameof(Player.ArmsUpdate), new[] { typeof(float) });
+                _bodyUpdate = AccessTools.Method(typeof(Player), nameof(Player.BodyUpdate), new[] { typeof(float), typeof(int) });
+                _fbbikUpdate = AccessTools.Method(typeof(Player), nameof(Player.FBBIKUpdate), new[] { typeof(float) });
+                _complexLateUpdate = AccessTools.Method(typeof(Player), nameof(Player.ComplexLateUpdate), new[] { typeof(EUpdateQueue), typeof(float) });
                 MethodInfo propPrefix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(PropUpdatePrefix));
                 MethodInfo triggerPrefix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(TriggerSearchPrefix));
-                if (_propUpdate == null || _triggerSearch == null || propPrefix == null || triggerPrefix == null) throw new MissingMethodException("Expected EFT Player presentation methods were not found.");
+                MethodInfo armsPrefix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(ArmsUpdatePrefix));
+                MethodInfo bodyPrefix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(BodyUpdatePrefix));
+                MethodInfo ikPrefix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(FbbikUpdatePrefix));
+                MethodInfo complexLatePrefix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(ComplexLateUpdatePrefix));
+                MethodInfo complexLatePostfix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(ComplexLateUpdatePostfix));
+                if (_propUpdate == null || _triggerSearch == null || _armsUpdate == null || _bodyUpdate == null || _fbbikUpdate == null || _complexLateUpdate == null
+                    || propPrefix == null || triggerPrefix == null || armsPrefix == null || bodyPrefix == null || ikPrefix == null || complexLatePrefix == null || complexLatePostfix == null)
+                    throw new MissingMethodException("Expected EFT Player presentation methods were not found.");
                 _harmony.Patch(_propUpdate, prefix: new HarmonyMethod(propPrefix));
                 _harmony.Patch(_triggerSearch, prefix: new HarmonyMethod(triggerPrefix));
+                _harmony.Patch(_armsUpdate, prefix: new HarmonyMethod(armsPrefix));
+                _harmony.Patch(_bodyUpdate, prefix: new HarmonyMethod(bodyPrefix));
+                _harmony.Patch(_fbbikUpdate, prefix: new HarmonyMethod(ikPrefix));
+                _harmony.Patch(_complexLateUpdate, prefix: new HarmonyMethod(complexLatePrefix), postfix: new HarmonyMethod(complexLatePostfix));
                 _patchesInstalled = true;
+                InstallOptionalFikaPatches();
             }
             catch (Exception ex)
             {
@@ -247,8 +315,65 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             }
         }
 
-        private static bool PropUpdatePrefix(Player __instance) => _instance == null || _instance.ShouldRun(__instance, true);
-        private static bool TriggerSearchPrefix(Player __instance) => _instance == null || _instance.ShouldRun(__instance, false);
+        private static bool PropUpdatePrefix(Player __instance) => _instance == null || _instance.ShouldRun(__instance, BudgetedUpdate.Prop);
+        private static bool TriggerSearchPrefix(Player __instance) => _instance == null || _instance.ShouldRun(__instance, BudgetedUpdate.Trigger);
+        private static bool ArmsUpdatePrefix(Player __instance) => _instance == null || _instance.ShouldRun(__instance, BudgetedUpdate.Arms);
+        private static bool BodyUpdatePrefix(Player __instance) => _instance == null || _instance.ShouldRun(__instance, BudgetedUpdate.Body);
+        private static bool FbbikUpdatePrefix(Player __instance) => _instance == null || _instance.ShouldRun(__instance, BudgetedUpdate.Ik);
+        private static bool ComplexLateUpdatePrefix(Player __instance)
+        {
+            _allowedComplexLatePlayerId = 0;
+            bool run = _instance == null || _instance.ShouldRun(__instance, BudgetedUpdate.ComplexLate);
+            if (run && __instance != null) _allowedComplexLatePlayerId = __instance.GetInstanceID();
+            return run;
+        }
+
+        private static void ComplexLateUpdatePostfix() => _allowedComplexLatePlayerId = 0;
+
+        private void InstallOptionalFikaPatches()
+        {
+            if (_harmony == null || _observedVisualPass != null || _observedFbbikUpdate != null) return;
+            try
+            {
+                Assembly fika = null;
+                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assemblies.Length; i++)
+                    if (string.Equals(assemblies[i].GetName().Name, "Fika.Core", StringComparison.OrdinalIgnoreCase)) { fika = assemblies[i]; break; }
+                Type observed = fika?.GetType("Fika.Core.Main.Players.ObservedPlayer", false);
+                if (observed == null) return;
+                _observedVisualPass = observed.GetMethod("ObservedVisualPass", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(float), typeof(int) }, null);
+                _observedFbbikUpdate = observed.GetMethod("ObservedFBBIKUpdate", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(float), typeof(int) }, null);
+                MethodInfo visualPrefix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(ObservedVisualPassPrefix));
+                MethodInfo ikPrefix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(ObservedFbbikUpdatePrefix));
+                MethodInfo outerPostfix = AccessTools.Method(typeof(RemoteUpdateBudgetFeature), nameof(ObservedPresentationPostfix));
+                if (_observedVisualPass != null)
+                    _harmony.Patch(_observedVisualPass, prefix: new HarmonyMethod(visualPrefix), postfix: new HarmonyMethod(outerPostfix));
+                if (_observedFbbikUpdate != null)
+                    _harmony.Patch(_observedFbbikUpdate, prefix: new HarmonyMethod(ikPrefix), postfix: new HarmonyMethod(outerPostfix));
+                if (_observedVisualPass != null || _observedFbbikUpdate != null)
+                    _logger.LogInfo("Remote Character CPU Budget attached directly to Fika observed-player visual/IK presentation passes.");
+            }
+            catch (Exception ex)
+            {
+                _observedVisualPass = null;
+                _observedFbbikUpdate = null;
+                _exceptions.Add(Name + " optional Fika patch install", ex);
+                _logger.LogWarning(Name + " optional Fika presentation budgeting unavailable; base EFT budgeting remains active. " + ex.Message);
+            }
+        }
+
+        private static bool ObservedVisualPassPrefix(Player __instance) => ObservedPresentationPrefix(__instance, BudgetedUpdate.ObservedVisual);
+        private static bool ObservedFbbikUpdatePrefix(Player __instance) => ObservedPresentationPrefix(__instance, BudgetedUpdate.ObservedIk);
+
+        private static bool ObservedPresentationPrefix(Player player, BudgetedUpdate update)
+        {
+            _allowedComplexLatePlayerId = 0;
+            bool run = _instance == null || _instance.ShouldRun(player, update);
+            if (run && player != null) _allowedComplexLatePlayerId = player.GetInstanceID();
+            return run;
+        }
+
+        private static void ObservedPresentationPostfix() => _allowedComplexLatePlayerId = 0;
 
         private void RestoreAnimators(Animator[] animators)
         {
@@ -270,6 +395,10 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 _budgetedIds.Remove(_idRestore[i]);
                 _propCallCounters.Remove(_idRestore[i]);
                 _triggerCallCounters.Remove(_idRestore[i]);
+                _armsCallCounters.Remove(_idRestore[i]);
+                _bodyCallCounters.Remove(_idRestore[i]);
+                _ikCallCounters.Remove(_idRestore[i]);
+                _complexLateCallCounters.Remove(_idRestore[i]);
             }
         }
 
@@ -290,6 +419,10 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             _hiddenSince.Clear();
             _propCallCounters.Clear();
             _triggerCallCounters.Clear();
+            _armsCallCounters.Clear();
+            _bodyCallCounters.Clear();
+            _ikCallCounters.Clear();
+            _complexLateCallCounters.Clear();
             _budgetedIds.Clear();
             _seenIds.Clear();
             _idRestore.Clear();
@@ -297,5 +430,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         private static int Clamp(int value, int minimum, int maximum) => value < minimum ? minimum : value > maximum ? maximum : value;
         private static float Clamp(float value, float minimum, float maximum) => float.IsNaN(value) || float.IsInfinity(value) ? minimum : value < minimum ? minimum : value > maximum ? maximum : value;
+        private enum BudgetedUpdate { Prop, Trigger, Arms, Body, Ik, ComplexLate, ObservedVisual, ObservedIk }
     }
 }

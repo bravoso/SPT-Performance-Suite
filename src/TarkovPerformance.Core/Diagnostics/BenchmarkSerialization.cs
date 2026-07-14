@@ -41,6 +41,14 @@ namespace TarkovPerformanceSuite.Diagnostics
         public int RemoteCulledAnimatorCount;
         public long RemoteSkippedPropUpdates;
         public long RemoteSkippedTriggerSearches;
+        public long RemoteSkippedPresentationUpdates;
+        public bool OptimizationsEnabled;
+        public bool PipScopeActive;
+        public int PipScopeSourceResolution;
+        public int PipScopeOptimizedResolution;
+        public long PipScopeRenderedFrames;
+        public long PipScopeReusedFrames;
+        public double PipScopeAverageRenderMs;
         public long CompatibilityFastWorldLookups;
         public int? FikaServerFps;
     }
@@ -61,7 +69,7 @@ namespace TarkovPerformanceSuite.Diagnostics
         {
             if (writer == null) throw new ArgumentNullException(nameof(writer));
             if (export == null) throw new ArgumentNullException(nameof(export));
-            writer.WriteLine("timestamp,frame_time_ms,fps,main_thread_ms,render_thread_ms,cpu_total_ms,gpu_frame_ms,frame_time_gpu_ms,gfx_wait_for_present_ms,player_loop_ms,wait_for_target_fps_ms,gc_collect_ms,gc_value,draw_calls,setpass_calls,player_count,ai_count,visible_ai_count,corpse_count,animator_count,skinned_renderer_count,shadow_renderer_count,shadow_effective_distance,shadow_disabled_renderer_count,skinning_modified_renderer_count,remote_lod_mid_ai_count,remote_lod_far_ai_count,remote_lod_forced_group_count,remote_lod_modified_renderer_count,declutter_hidden_renderer_count,remote_budgeted_character_count,remote_culled_animator_count,remote_skipped_prop_updates,remote_skipped_trigger_searches,compatibility_fast_world_lookups,fika_server_fps,enabled_features");
+            writer.WriteLine("timestamp,frame_time_ms,fps,main_thread_ms,render_thread_ms,cpu_total_ms,gpu_frame_ms,frame_time_gpu_ms,gfx_wait_for_present_ms,player_loop_ms,wait_for_target_fps_ms,gc_collect_ms,gc_value,draw_calls,setpass_calls,player_count,ai_count,visible_ai_count,corpse_count,animator_count,skinned_renderer_count,shadow_renderer_count,shadow_effective_distance,shadow_disabled_renderer_count,skinning_modified_renderer_count,remote_lod_mid_ai_count,remote_lod_far_ai_count,remote_lod_forced_group_count,remote_lod_modified_renderer_count,declutter_hidden_renderer_count,remote_budgeted_character_count,remote_culled_animator_count,remote_skipped_prop_updates,remote_skipped_trigger_searches,remote_skipped_presentation_updates,optimizations_enabled,pip_scope_active,pip_scope_source_resolution,pip_scope_optimized_resolution,pip_scope_rendered_frames,pip_scope_reused_frames,pip_scope_average_render_ms,compatibility_fast_world_lookups,fika_server_fps,enabled_features");
             BenchmarkSample[] samples = export.Samples ?? Array.Empty<BenchmarkSample>();
             for (int i = 0; i < samples.Length; i++)
             {
@@ -100,6 +108,14 @@ namespace TarkovPerformanceSuite.Diagnostics
                 writer.Write(s.RemoteCulledAnimatorCount); writer.Write(',');
                 writer.Write(s.RemoteSkippedPropUpdates); writer.Write(',');
                 writer.Write(s.RemoteSkippedTriggerSearches); writer.Write(',');
+                writer.Write(s.RemoteSkippedPresentationUpdates); writer.Write(',');
+                writer.Write(s.OptimizationsEnabled ? "true" : "false"); writer.Write(',');
+                writer.Write(s.PipScopeActive ? "true" : "false"); writer.Write(',');
+                writer.Write(s.PipScopeSourceResolution); writer.Write(',');
+                writer.Write(s.PipScopeOptimizedResolution); writer.Write(',');
+                writer.Write(s.PipScopeRenderedFrames); writer.Write(',');
+                writer.Write(s.PipScopeReusedFrames); writer.Write(',');
+                WriteDouble(writer, s.PipScopeAverageRenderMs); writer.Write(',');
                 writer.Write(s.CompatibilityFastWorldLookups); writer.Write(',');
                 if (s.FikaServerFps.HasValue) writer.Write(s.FikaServerFps.Value);
                 writer.Write(',');
@@ -155,6 +171,14 @@ namespace TarkovPerformanceSuite.Diagnostics
                 writer.Write(",\"remoteCulledAnimatorCount\":"); writer.Write(s.RemoteCulledAnimatorCount);
                 writer.Write(",\"remoteSkippedPropUpdates\":"); writer.Write(s.RemoteSkippedPropUpdates);
                 writer.Write(",\"remoteSkippedTriggerSearches\":"); writer.Write(s.RemoteSkippedTriggerSearches);
+                writer.Write(",\"remoteSkippedPresentationUpdates\":"); writer.Write(s.RemoteSkippedPresentationUpdates);
+                writer.Write(",\"optimizationsEnabled\":"); writer.Write(s.OptimizationsEnabled ? "true" : "false");
+                writer.Write(",\"pipScopeActive\":"); writer.Write(s.PipScopeActive ? "true" : "false");
+                writer.Write(",\"pipScopeSourceResolution\":"); writer.Write(s.PipScopeSourceResolution);
+                writer.Write(",\"pipScopeOptimizedResolution\":"); writer.Write(s.PipScopeOptimizedResolution);
+                writer.Write(",\"pipScopeRenderedFrames\":"); writer.Write(s.PipScopeRenderedFrames);
+                writer.Write(",\"pipScopeReusedFrames\":"); writer.Write(s.PipScopeReusedFrames);
+                writer.Write(",\"pipScopeAverageRenderMs\":"); WriteDouble(writer, s.PipScopeAverageRenderMs);
                 writer.Write(",\"compatibilityFastWorldLookups\":"); writer.Write(s.CompatibilityFastWorldLookups);
                 writer.Write(",\"fikaServerFps\":"); WriteJsonNullable(writer, s.FikaServerFps);
                 writer.Write('}');

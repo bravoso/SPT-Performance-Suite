@@ -50,7 +50,7 @@ namespace TarkovPerformanceSuite.Tests
                 StartedUtc = "2026-01-01T00:00:00Z",
                 MapName = "factory4_day",
                 EnabledFeatures = "shadow=false",
-                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1, ShadowEffectiveDistance = 75, ShadowDisabledRendererCount = 20, SkinningModifiedRendererCount = 4, RemoteLodFarAiCount = 3, RemoteLodForcedGroupCount = 8, DeclutterHiddenRendererCount = 120, RemoteBudgetedCharacterCount = 6, RemoteSkippedPropUpdates = 42, CompatibilityFastWorldLookups = 8 } }
+                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1, ShadowEffectiveDistance = 75, ShadowDisabledRendererCount = 20, SkinningModifiedRendererCount = 4, RemoteLodFarAiCount = 3, RemoteLodForcedGroupCount = 8, DeclutterHiddenRendererCount = 120, RemoteBudgetedCharacterCount = 6, RemoteSkippedPropUpdates = 42, RemoteSkippedPresentationUpdates = 84, OptimizationsEnabled = true, PipScopeActive = true, PipScopeSourceResolution = 1024, PipScopeOptimizedResolution = 512, PipScopeRenderedFrames = 20, PipScopeReusedFrames = 40, PipScopeAverageRenderMs = 1.25, CompatibilityFastWorldLookups = 8 } }
             };
             var csv = new StringWriter(); BenchmarkSerializer.WriteCsv(csv, export);
             var json = new StringWriter(); BenchmarkSerializer.WriteJson(json, export);
@@ -68,6 +68,10 @@ namespace TarkovPerformanceSuite.Tests
             True(json.ToString().Contains("\"declutterHiddenRendererCount\":120"));
             True(json.ToString().Contains("\"remoteBudgetedCharacterCount\":6"));
             True(json.ToString().Contains("\"remoteSkippedPropUpdates\":42"));
+            True(json.ToString().Contains("\"remoteSkippedPresentationUpdates\":84"));
+            True(json.ToString().Contains("\"optimizationsEnabled\":true"));
+            True(json.ToString().Contains("\"pipScopeOptimizedResolution\":512"));
+            True(json.ToString().Contains("\"pipScopeReusedFrames\":40"));
             True(json.ToString().Contains("\"compatibilityFastWorldLookups\":8"));
         }
 

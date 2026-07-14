@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
+using BepInEx.Bootstrap;
 using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
@@ -25,6 +26,8 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private Harmony _harmony;
         private MethodInfo _botCounterTarget;
         private float _nextDiscovery;
+        private int _discoveryAttempts;
+        private bool _discoveryComplete;
 
         internal KnownModCompatibilityFeature(ManualLogSource logger, PluginConfiguration configuration, RecentExceptionLog exceptions)
         {
@@ -42,7 +45,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             get
             {
                 if (!IsEnabled) return _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
-                if (_botCounterTarget == null) return "enabled | no supported scan found";
+                if (_botCounterTarget == null) return _discoveryComplete ? "enabled | Bot Counter not installed" : "enabled | checking installed mods";
                 return "enabled | Bot Counter full-scene scan removed | cached lookups " + _fastLookups;
             }
         }
@@ -63,7 +66,12 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             if (IsEnabled == enabled) return;
             IsEnabled = enabled;
             _configuration.KnownModFixesEnabled.Value = enabled;
-            if (enabled) TryInstall();
+            if (enabled)
+            {
+                _discoveryAttempts = 0;
+                _discoveryComplete = false;
+                TryInstall();
+            }
             else Uninstall();
         }
 
@@ -78,8 +86,8 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         internal void Tick(float now)
         {
-            if (!IsEnabled || _botCounterTarget != null || now < _nextDiscovery) return;
-            _nextDiscovery = now + 5f;
+            if (!IsEnabled || _discoveryComplete || _botCounterTarget != null || now < _nextDiscovery) return;
+            _nextDiscovery = now + 1f;
             TryInstall();
         }
 
@@ -88,8 +96,22 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             if (!IsEnabled || _botCounterTarget != null) return;
             try
             {
-                Type type = AccessTools.TypeByName("SPTBotCounter.BotCounterPlugin");
-                if (type == null) return;
+                if (!Chainloader.PluginInfos.TryGetValue("com.yourname.botcounter", out var pluginInfo))
+                {
+                    // Plugin discovery is complete before plugin Awake methods run. Do not repeatedly
+                    // scan every loaded type when the optional mod is absent; that caused a 0.5 s
+                    // hitch every five seconds on an i7-2600K.
+                    _discoveryComplete = true;
+                    return;
+                }
+
+                Type type = pluginInfo.Instance != null ? pluginInfo.Instance.GetType() : null;
+                if (type == null)
+                {
+                    _discoveryAttempts++;
+                    if (_discoveryAttempts < 3) return;
+                    throw new TypeLoadException("SPT Detailed Bot Counter is registered but its plugin instance was unavailable.");
+                }
                 MethodInfo target = AccessTools.Method(type, "UpdateBotClassifications");
                 MethodInfo transpiler = AccessTools.Method(typeof(KnownModCompatibilityFeature), nameof(ReplaceGameWorldSearch));
                 if (target == null || transpiler == null) throw new MissingMethodException("SPT Detailed Bot Counter 1.7 update method was not found.");
@@ -101,6 +123,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                     throw new InvalidOperationException("Expected exactly one GameWorld full-scene lookup, found " + _replacementCount + ".");
                 }
                 _botCounterTarget = target;
+                _discoveryComplete = true;
                 _breaker.Success();
                 _logger.LogWarning("Removed SPT Detailed Bot Counter's repeating Object.FindObjectOfType<GameWorld>() scan. Counts and UI remain unchanged; the suite supplies its cached raid world.");
             }
@@ -121,6 +144,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             if (_botCounterTarget != null && _harmony != null)
                 _harmony.Unpatch(_botCounterTarget, HarmonyPatchType.Transpiler, _harmony.Id);
             _botCounterTarget = null;
+            _discoveryComplete = false;
         }
 
         private static IEnumerable<CodeInstruction> ReplaceGameWorldSearch(IEnumerable<CodeInstruction> instructions)

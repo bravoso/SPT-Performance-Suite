@@ -17,7 +17,7 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             Directory.CreateDirectory(directory);
             string path = Path.Combine(directory, "diagnostics_" + DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss") + ".txt");
             var builder = new StringBuilder(8192);
-            builder.AppendLine("Tarkov Performance Suite diagnostics 0.4.0");
+            builder.AppendLine("Tarkov Performance Suite diagnostics " + Plugin.PluginVersion);
             builder.AppendLine("Generated: " + DateTime.Now.ToString("O"));
             builder.AppendLine();
             builder.AppendLine("VERSIONS");

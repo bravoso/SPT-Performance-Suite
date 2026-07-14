@@ -52,7 +52,8 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
 
         internal bool Record(double now, double frameTimeMs, ProfilerMetrics metrics, EntityCounts counts, ShadowFeatureCounters shadows,
             SkinningFeatureCounters skinning, RemoteRenderLodCounters renderLod, DeclutterCounters declutter,
-            RemoteUpdateBudgetCounters remoteBudget, long compatibilityFastWorldLookups, int? fikaServerFps)
+            RemoteUpdateBudgetCounters remoteBudget, PipScopeCounters pipScope, bool optimizationsEnabled,
+            long compatibilityFastWorldLookups, int? fikaServerFps)
         {
             if (!IsCapturing) return false;
             ElapsedSeconds = now - _startedRealtime;
@@ -95,6 +96,14 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                     RemoteCulledAnimatorCount = remoteBudget.CulledAnimators,
                     RemoteSkippedPropUpdates = remoteBudget.SkippedPropUpdates,
                     RemoteSkippedTriggerSearches = remoteBudget.SkippedTriggerSearches,
+                    RemoteSkippedPresentationUpdates = remoteBudget.SkippedPresentationUpdates,
+                    OptimizationsEnabled = optimizationsEnabled,
+                    PipScopeActive = pipScope.Active,
+                    PipScopeSourceResolution = pipScope.SourceResolution,
+                    PipScopeOptimizedResolution = pipScope.OptimizedResolution,
+                    PipScopeRenderedFrames = pipScope.RenderedFrames,
+                    PipScopeReusedFrames = pipScope.ReusedFrames,
+                    PipScopeAverageRenderMs = pipScope.AverageRenderMs,
                     CompatibilityFastWorldLookups = compatibilityFastWorldLookups,
                     FikaServerFps = fikaServerFps
                 };

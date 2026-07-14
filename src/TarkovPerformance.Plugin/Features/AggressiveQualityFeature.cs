@@ -27,7 +27,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         public bool IsAvailable => !_breaker.IsOpen;
         public bool IsEnabled { get; private set; }
         internal string StatusText => IsEnabled
-            ? $"enabled | maxLOD {QualitySettings.maximumLODLevel} | bias {QualitySettings.lodBias:F2} | mip {QualitySettings.globalTextureMipmapLimit} | shadows {QualitySettings.shadowDistance:F0}m"
+            ? $"enabled | mip {QualitySettings.globalTextureMipmapLimit} | shadows {QualitySettings.shadowDistance:F0}m | LOD untouched"
             : _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
 
         public void Initialize()
@@ -72,8 +72,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                     _haveOriginal = true;
                 }
 
-                QualitySettings.maximumLODLevel = Clamp(_configuration.AggressiveMaximumLodLevel.Value, 0, 3);
-                QualitySettings.lodBias = Clamp(_configuration.AggressiveLodBias.Value, 0.25f, 2f);
                 QualitySettings.globalTextureMipmapLimit = Clamp(_configuration.AggressiveTextureMipLimit.Value, 0, 2);
                 QualitySettings.shadowDistance = Clamp(_configuration.AggressiveShadowDistance.Value, 0f, 150f);
                 QualitySettings.pixelLightCount = Clamp(_configuration.AggressivePixelLights.Value, 0, 4);
@@ -111,11 +109,9 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         private readonly struct QualitySnapshot
         {
-            internal QualitySnapshot(int maximumLod, float lodBias, int mipLimit, float shadowDistance, int pixelLights, int particleBudget,
+            internal QualitySnapshot(int mipLimit, float shadowDistance, int pixelLights, int particleBudget,
                 bool realtimeReflections, bool softParticles, SkinWeights skinWeights)
             {
-                MaximumLod = maximumLod;
-                LodBias = lodBias;
                 MipLimit = mipLimit;
                 ShadowDistance = shadowDistance;
                 PixelLights = pixelLights;
@@ -125,8 +121,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 SkinWeights = skinWeights;
             }
 
-            private int MaximumLod { get; }
-            private float LodBias { get; }
             private int MipLimit { get; }
             private float ShadowDistance { get; }
             private int PixelLights { get; }
@@ -136,8 +130,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             private SkinWeights SkinWeights { get; }
 
             internal static QualitySnapshot Capture() => new QualitySnapshot(
-                QualitySettings.maximumLODLevel,
-                QualitySettings.lodBias,
                 QualitySettings.globalTextureMipmapLimit,
                 QualitySettings.shadowDistance,
                 QualitySettings.pixelLightCount,
@@ -148,8 +140,6 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
             internal void Apply()
             {
-                QualitySettings.maximumLODLevel = MaximumLod;
-                QualitySettings.lodBias = LodBias;
                 QualitySettings.globalTextureMipmapLimit = MipLimit;
                 QualitySettings.shadowDistance = ShadowDistance;
                 QualitySettings.pixelLightCount = PixelLights;

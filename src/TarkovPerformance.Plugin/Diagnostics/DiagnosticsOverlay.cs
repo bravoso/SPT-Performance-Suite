@@ -19,6 +19,7 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         internal double SuiteAverageMs { get; set; }
         internal OverlayMode DisplayMode { get; set; } = OverlayMode.Compact;
         internal string PresetName { get; set; } = "Custom";
+        internal bool OptimizationsActive { get; set; } = true;
         internal string OptimizationSummary { get; set; } = string.Empty;
         internal bool NeedsRefresh(float now) => Visible && now >= _nextTextRefresh;
 
@@ -39,7 +40,8 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             string bottleneck = Bottleneck(mainMs, gpuMs);
 
             _builder.Clear();
-            _builder.Append("TARKOV PERFORMANCE SUITE 0.4.0  |  ").Append(PresetName).Append("  |  ").AppendLine(bottleneck);
+            _builder.Append("TARKOV PERFORMANCE SUITE ").Append(Plugin.PluginVersion).Append("  |  ").Append(PresetName)
+                .Append("  |  OPTIMIZATIONS ").Append(OptimizationsActive ? "ON" : "OFF").Append("  |  ").AppendLine(bottleneck);
             if (DisplayMode == OverlayMode.Compact)
             {
                 _builder.Append("FPS ").Append(fps.ToString("F0")).Append("   1% low ").Append(onePercentLow.ToString("F0"))
@@ -49,11 +51,11 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                     .Append("   server ").Append(fika.ServerFps?.ToString() ?? "n/a").AppendLine(" FPS");
                 _builder.Append("Capture: ").Append(capture.IsCapturing ? capture.ElapsedSeconds.ToString("F0") + "/" + capture.DurationSeconds.ToString("F0") + " s" : "idle")
                     .Append("   Suite cost ").Append(SuiteAverageMs.ToString("F3")).AppendLine(" ms");
-                _builder.AppendLine("Num7 overlay   Num8 benchmark   Num9 report   F12 settings");
+                _builder.AppendLine("Num4 all optimizations A/B   Num7 overlay   Num8 reports   Num9 report   F12 settings");
                 _text = _builder.ToString();
                 return;
             }
-            _builder.AppendLine("[Num7 overlay | Num8 capture | Num9 report | Num6 shadows | Num5 skinning | F12 settings]");
+            _builder.AppendLine("[Num4 ALL OPTIMIZATIONS A/B | Num7 overlay | Num8 repeat reports | Num9 report | F12 settings]");
             _builder.Append("State: ").Append(raidState).Append(" | Experiments: ").AppendLine(experimentStatus);
             _builder.Append("FPS ").Append(fps.ToString("F1")).Append(" | frame ").Append(instantMs.ToString("F2")).Append(" ms | avg ").Append(stats.AverageMs.ToString("F2"))
                 .Append(" | median ").Append(stats.MedianMs.ToString("F2")).Append(" | p95 ").Append(stats.P95Ms.ToString("F2")).Append(" | p99 ").Append(stats.P99Ms.ToString("F2")).AppendLine(" ms");
