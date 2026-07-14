@@ -49,18 +49,22 @@ namespace TarkovPerformanceSuite.Tests
                 StartedUtc = "2026-01-01T00:00:00Z",
                 MapName = "factory4_day",
                 EnabledFeatures = "shadow=false",
-                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1, ShadowEffectiveDistance = 75, ShadowDisabledRendererCount = 20, SkinningModifiedRendererCount = 4 } }
+                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1, ShadowEffectiveDistance = 75, ShadowDisabledRendererCount = 20, SkinningModifiedRendererCount = 4, RemoteLodFarAiCount = 3, RemoteLodForcedGroupCount = 8, DeclutterHiddenRendererCount = 120 } }
             };
             var csv = new StringWriter(); BenchmarkSerializer.WriteCsv(csv, export);
             var json = new StringWriter(); BenchmarkSerializer.WriteJson(json, export);
             True(csv.ToString().Contains("frame_time_ms"));
             True(csv.ToString().Contains("gpu_frame_ms"));
             True(csv.ToString().Contains("shadow_effective_distance"));
+            True(csv.ToString().Contains("remote_lod_forced_group_count"));
+            True(csv.ToString().Contains(",120,"));
             True(csv.ToString().Contains("shadow=false"));
             True(json.ToString().Contains("factory4_day"));
             True(json.ToString().Contains("\"frameTimeMs\":10"));
             True(json.ToString().Contains("\"gpuFrameMs\":4"));
             True(json.ToString().Contains("\"shadowEffectiveDistance\":75"));
+            True(json.ToString().Contains("\"remoteLodForcedGroupCount\":8"));
+            True(json.ToString().Contains("\"declutterHiddenRendererCount\":120"));
         }
 
         private static void TestEntityClassification()

@@ -16,6 +16,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         internal Animator[] Animators = Array.Empty<Animator>();
         internal Renderer[] Renderers = Array.Empty<Renderer>();
         internal SkinnedMeshRenderer[] SkinnedRenderers = Array.Empty<SkinnedMeshRenderer>();
+        internal LODGroup[] LodGroups = Array.Empty<LODGroup>();
     }
 
     internal readonly struct EntityCounts
@@ -140,6 +141,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 entity.Animators = root.GetComponentsInChildren<Animator>(true);
                 entity.Renderers = root.GetComponentsInChildren<Renderer>(true);
                 entity.SkinnedRenderers = root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                entity.LodGroups = root.GetComponentsInChildren<LODGroup>(true);
                 entity.NextComponentRefresh = now + 10f;
             }
         }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 - 2026-07-14
+
+- Add an opt-in aggressive Unity render profile: earlier global LOD selection, fixed pre-raid texture mip limit, shorter shadows, two-bone skinning, reduced pixel lights, disabled realtime probes/soft particles, and a smaller particle-raycast budget.
+- Add distant confirmed-remote-AI LOD forcing with cheaper skin quality, no skinned motion vectors, no reflection probes, forced no-motion vectors, and dynamic occlusion enabled.
+- Add incremental renderer-only cosmetic decluttering with dry-run counters, conservative name/size/type filtering, and complete restoration.
+- Surface aggressive-module counters and processing cost in the overlay and diagnostic report.
+- Keep network state, AI authority, movement roots, combat, damage, inventory, and navigation untouched.
+
 ## 0.2.0 - 2026-07-14
 
 - Added adaptive remote-AI shadow distance with sustained-pressure hysteresis and slow recovery.

@@ -32,6 +32,21 @@ namespace TarkovPerformanceSuite.Configuration
             SkinningOffscreenHold = config.Bind("Experiments", "RemoteAiOffscreenSkinningHoldSeconds", 0.5f, "How long a distant AI must stay invisible before changing offscreen skinning, clamped to 0.1-10 seconds.");
             SkinningToggleKey = config.Bind("Experiments", "RemoteAiOffscreenSkinningToggleKey", new KeyboardShortcut(KeyCode.Keypad5), "Toggle the offscreen skinning experiment. Also available in the F12 menu.");
             SkinningDryRun = config.Bind("Experiments", "RemoteAiOffscreenSkinningDryRun", false, "Count potential offscreen skinning changes without applying them.");
+            AggressiveModeEnabled = config.Bind("Aggressive", "Enabled", false, "Apply the aggressive global render profile. This intentionally trades visual quality for CPU, render-thread, and VRAM headroom.");
+            AggressiveMaximumLodLevel = config.Bind("Aggressive", "MaximumLodLevel", 1, "Skip this many highest scene LOD levels, clamped to 0-3.");
+            AggressiveLodBias = config.Bind("Aggressive", "LodBias", 0.6f, "Global LOD bias, clamped to 0.25-2.0. Lower values select cheaper LODs sooner.");
+            AggressiveTextureMipLimit = config.Bind("Aggressive", "TextureMipLimit", 1, "Highest texture mip levels to skip, clamped to 0-2. Apply before loading a raid to avoid a mid-raid texture re-upload stall.");
+            AggressiveShadowDistance = config.Bind("Aggressive", "ShadowDistance", 45f, "Global shadow distance in metres, clamped to 0-150.");
+            AggressivePixelLights = config.Bind("Aggressive", "PixelLightCount", 1, "Maximum pixel lights, clamped to 0-4.");
+            AggressiveParticleRaycastBudget = config.Bind("Aggressive", "ParticleRaycastBudget", 16, "Global particle collision raycast budget, clamped to 0-256.");
+            RemoteAiRenderLodEnabled = config.Bind("Aggressive", "RemoteAiRenderLodEnabled", false, "Force cheaper LOD, skinning, reflection, and motion-vector settings on distant confirmed remote AI.");
+            RemoteAiRenderLodNearDistance = config.Bind("Aggressive", "RemoteAiRenderLodNearDistance", 25f, "Inside this distance remote AI retain automatic full-quality rendering, clamped to 10-200 metres.");
+            RemoteAiRenderLodFarDistance = config.Bind("Aggressive", "RemoteAiRenderLodFarDistance", 60f, "Beyond this distance remote AI use their cheapest available LOD, clamped to the near distance and 500 metres.");
+            RemoteAiRenderLodUpdateInterval = config.Bind("Aggressive", "RemoteAiRenderLodUpdateIntervalSeconds", 0.1f, "Remote render LOD refresh interval, clamped to 0.05-2 seconds.");
+            RemoteAiRenderLodDryRun = config.Bind("Aggressive", "RemoteAiRenderLodDryRun", false, "Count remote render LOD candidates without changing components.");
+            CosmeticDeclutterEnabled = config.Bind("Aggressive", "CosmeticDeclutterEnabled", false, "Incrementally hide small renderer-only cosmetic clutter selected by a conservative name and size filter.");
+            CosmeticDeclutterDryRun = config.Bind("Aggressive", "CosmeticDeclutterDryRun", false, "Count cosmetic clutter candidates without hiding them.");
+            CosmeticDeclutterBatchSize = config.Bind("Aggressive", "CosmeticDeclutterBatchSize", 200, "Renderers classified per frame after raid start, clamped to 25-1000.");
         }
 
         internal ConfigEntry<bool> Enabled { get; }
@@ -58,6 +73,21 @@ namespace TarkovPerformanceSuite.Configuration
         internal ConfigEntry<float> SkinningOffscreenHold { get; }
         internal ConfigEntry<KeyboardShortcut> SkinningToggleKey { get; }
         internal ConfigEntry<bool> SkinningDryRun { get; }
+        internal ConfigEntry<bool> AggressiveModeEnabled { get; }
+        internal ConfigEntry<int> AggressiveMaximumLodLevel { get; }
+        internal ConfigEntry<float> AggressiveLodBias { get; }
+        internal ConfigEntry<int> AggressiveTextureMipLimit { get; }
+        internal ConfigEntry<float> AggressiveShadowDistance { get; }
+        internal ConfigEntry<int> AggressivePixelLights { get; }
+        internal ConfigEntry<int> AggressiveParticleRaycastBudget { get; }
+        internal ConfigEntry<bool> RemoteAiRenderLodEnabled { get; }
+        internal ConfigEntry<float> RemoteAiRenderLodNearDistance { get; }
+        internal ConfigEntry<float> RemoteAiRenderLodFarDistance { get; }
+        internal ConfigEntry<float> RemoteAiRenderLodUpdateInterval { get; }
+        internal ConfigEntry<bool> RemoteAiRenderLodDryRun { get; }
+        internal ConfigEntry<bool> CosmeticDeclutterEnabled { get; }
+        internal ConfigEntry<bool> CosmeticDeclutterDryRun { get; }
+        internal ConfigEntry<int> CosmeticDeclutterBatchSize { get; }
 
         internal ValidatedConfiguration Validated => ConfigurationValidator.Validate(
             CaptureDurationSeconds.Value,

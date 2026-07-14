@@ -32,6 +32,11 @@ namespace TarkovPerformanceSuite.Diagnostics
         public double ShadowEffectiveDistance;
         public int ShadowDisabledRendererCount;
         public int SkinningModifiedRendererCount;
+        public int RemoteLodMidAiCount;
+        public int RemoteLodFarAiCount;
+        public int RemoteLodForcedGroupCount;
+        public int RemoteLodModifiedRendererCount;
+        public int DeclutterHiddenRendererCount;
         public int? FikaServerFps;
     }
 
@@ -51,7 +56,7 @@ namespace TarkovPerformanceSuite.Diagnostics
         {
             if (writer == null) throw new ArgumentNullException(nameof(writer));
             if (export == null) throw new ArgumentNullException(nameof(export));
-            writer.WriteLine("timestamp,frame_time_ms,fps,main_thread_ms,render_thread_ms,cpu_total_ms,gpu_frame_ms,frame_time_gpu_ms,gfx_wait_for_present_ms,player_loop_ms,wait_for_target_fps_ms,gc_collect_ms,gc_value,draw_calls,setpass_calls,player_count,ai_count,visible_ai_count,corpse_count,animator_count,skinned_renderer_count,shadow_renderer_count,shadow_effective_distance,shadow_disabled_renderer_count,skinning_modified_renderer_count,fika_server_fps,enabled_features");
+            writer.WriteLine("timestamp,frame_time_ms,fps,main_thread_ms,render_thread_ms,cpu_total_ms,gpu_frame_ms,frame_time_gpu_ms,gfx_wait_for_present_ms,player_loop_ms,wait_for_target_fps_ms,gc_collect_ms,gc_value,draw_calls,setpass_calls,player_count,ai_count,visible_ai_count,corpse_count,animator_count,skinned_renderer_count,shadow_renderer_count,shadow_effective_distance,shadow_disabled_renderer_count,skinning_modified_renderer_count,remote_lod_mid_ai_count,remote_lod_far_ai_count,remote_lod_forced_group_count,remote_lod_modified_renderer_count,declutter_hidden_renderer_count,fika_server_fps,enabled_features");
             BenchmarkSample[] samples = export.Samples ?? Array.Empty<BenchmarkSample>();
             for (int i = 0; i < samples.Length; i++)
             {
@@ -81,6 +86,11 @@ namespace TarkovPerformanceSuite.Diagnostics
                 WriteDouble(writer, s.ShadowEffectiveDistance); writer.Write(',');
                 writer.Write(s.ShadowDisabledRendererCount); writer.Write(',');
                 writer.Write(s.SkinningModifiedRendererCount); writer.Write(',');
+                writer.Write(s.RemoteLodMidAiCount); writer.Write(',');
+                writer.Write(s.RemoteLodFarAiCount); writer.Write(',');
+                writer.Write(s.RemoteLodForcedGroupCount); writer.Write(',');
+                writer.Write(s.RemoteLodModifiedRendererCount); writer.Write(',');
+                writer.Write(s.DeclutterHiddenRendererCount); writer.Write(',');
                 if (s.FikaServerFps.HasValue) writer.Write(s.FikaServerFps.Value);
                 writer.Write(',');
                 WriteCsvField(writer, export.EnabledFeatures ?? string.Empty);
@@ -126,6 +136,11 @@ namespace TarkovPerformanceSuite.Diagnostics
                 writer.Write(",\"shadowEffectiveDistance\":"); WriteDouble(writer, s.ShadowEffectiveDistance);
                 writer.Write(",\"shadowDisabledRendererCount\":"); writer.Write(s.ShadowDisabledRendererCount);
                 writer.Write(",\"skinningModifiedRendererCount\":"); writer.Write(s.SkinningModifiedRendererCount);
+                writer.Write(",\"remoteLodMidAiCount\":"); writer.Write(s.RemoteLodMidAiCount);
+                writer.Write(",\"remoteLodFarAiCount\":"); writer.Write(s.RemoteLodFarAiCount);
+                writer.Write(",\"remoteLodForcedGroupCount\":"); writer.Write(s.RemoteLodForcedGroupCount);
+                writer.Write(",\"remoteLodModifiedRendererCount\":"); writer.Write(s.RemoteLodModifiedRendererCount);
+                writer.Write(",\"declutterHiddenRendererCount\":"); writer.Write(s.DeclutterHiddenRendererCount);
                 writer.Write(",\"fikaServerFps\":"); WriteJsonNullable(writer, s.FikaServerFps);
                 writer.Write('}');
             }
