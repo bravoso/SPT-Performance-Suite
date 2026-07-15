@@ -9,6 +9,7 @@ Primary sources consulted before implementation:
 - Harmony patching and priority: <https://harmony.pardeike.net/articles/patching.html> and <https://harmony.pardeike.net/articles/priorities.html>
 - Unity 2022.3 `ProfilerRecorder`: <https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Unity.Profiling.ProfilerRecorder.html>
 - Unity 2022.3 `SkinnedMeshRenderer`: <https://docs.unity3d.com/2022.3/Documentation/ScriptReference/SkinnedMeshRenderer.html>
+- Tyrian-DeClutterer by Xenoxia8953: <https://github.com/Xenoxia8953/Tyrian-DeClutterer>. Examined as prior art for cosmetic scene decluttering and common clutter categories; no source or binary is bundled, and the suite uses a separately written, incremental and reversible renderer-only design.
 - Fika public source: <https://github.com/project-fika/Fika-Plugin>
 - Fika headless client: <https://wiki.project-fika.com/advanced-features/headless-client>
 - SPT organization and 4.0.13 release: <https://github.com/sp-tarkov> and <https://github.com/sp-tarkov/build/releases/tag/4.0.13>
