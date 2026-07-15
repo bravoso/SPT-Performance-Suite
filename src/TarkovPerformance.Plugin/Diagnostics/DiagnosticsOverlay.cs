@@ -47,7 +47,7 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                 _builder.Append("FPS ").Append(fps.ToString("F0")).Append("   1% low ").Append(onePercentLow.ToString("F0"))
                     .Append("   frame ").Append(instantMs.ToString("F2")).AppendLine(" ms");
                 _builder.Append("CPU main ").Append(Format(mainMs)).Append(" ms   render ").Append(Format(renderMs)).Append(" ms   GPU ").Append(Format(gpuMs)).AppendLine(" ms");
-                _builder.Append("AI ").Append(counts.Ai).Append(" (visible ").Append(counts.VisibleAi).Append(")   players ").Append(counts.Players)
+                _builder.Append("AI ").Append(counts.Ai).Append(" (visible ").Append(counts.VisibleAi).Append(", map-hidden ").Append(counts.BakedHiddenEntities).Append(")   players ").Append(counts.Players)
                     .Append("   server ").Append(fika.ServerFps?.ToString() ?? "n/a").AppendLine(" FPS");
                 _builder.Append("Capture: ").Append(capture.IsCapturing ? capture.ElapsedSeconds.ToString("F0") + "/" + capture.DurationSeconds.ToString("F0") + " s" : "idle")
                     .Append("   Suite cost ").Append(SuiteAverageMs.ToString("F3")).AppendLine(" ms");
@@ -78,7 +78,9 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             AppendLong("triangles", metrics.Value("Triangles Count")); AppendLong("vertices", metrics.Value("Vertices Count")); AppendLong("shadow casters", metrics.Value("Shadow Casters Count"));
             _builder.AppendLine();
             _builder.Append("Entities: players ").Append(counts.Players).Append(" (local ").Append(counts.LocalPlayers).Append(", human ").Append(counts.RemoteHumans)
-                .Append(") | AI ").Append(counts.Ai).Append(" living ").Append(counts.LivingAi).Append(" visible ").Append(counts.VisibleAi).Append(" | observed corpses ").Append(counts.Corpses).AppendLine();
+                .Append(") | AI ").Append(counts.Ai).Append(" living ").Append(counts.LivingAi).Append(" visible ").Append(counts.VisibleAi)
+                .Append(" | baked culling ").Append(counts.BakedCullingEntities).Append(" hidden ").Append(counts.BakedHiddenEntities)
+                .Append(" | observed corpses ").Append(counts.Corpses).AppendLine();
             _builder.Append("Presentation: animators ").Append(counts.Animators).Append(" | skinned renderers ").Append(counts.SkinnedRenderers).Append(" | AI shadow renderers ").Append(counts.ShadowRenderers).AppendLine();
             _builder.Append("Fika: observed ").Append(fikaObserved).Append(" | observed AI ").Append(fikaAi).Append(" | locally visible AI ").Append(fikaVisibleAi)
                 .Append(" | server FPS ").Append(fika.ServerFps?.ToString() ?? "n/a").AppendLine();

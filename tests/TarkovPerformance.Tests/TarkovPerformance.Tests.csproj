@@ -4,9 +4,15 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>TarkovPerformance.Tests</AssemblyName>
     <RootNamespace>TarkovPerformanceSuite.Tests</RootNamespace>
+    <SptReferenceRoot Condition="'$(SptReferenceRoot)' == ''">$(SPT_REFERENCE_ROOT)</SptReferenceRoot>
+    <BepInExCoreDir>$(SptReferenceRoot)\BepInEx\core</BepInExCoreDir>
   </PropertyGroup>
+  <Target Name="ValidateSptReferenceRoot" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(SptReferenceRoot)' == ''" Text="Set SPT_REFERENCE_ROOT or pass /p:SptReferenceRoot=..." />
+    <Error Condition="!Exists('$(BepInExCoreDir)\BepInEx.dll')" Text="BepInEx.dll was not found under $(BepInExCoreDir)." />
+  </Target>
   <ItemGroup>
     <ProjectReference Include="..\..\src\TarkovPerformance.Core\TarkovPerformance.Core.csproj" />
+    <Reference Include="BepInEx" HintPath="$(BepInExCoreDir)\BepInEx.dll" />
   </ItemGroup>
 </Project>
-

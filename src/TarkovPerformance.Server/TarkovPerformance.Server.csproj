@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>TarkovPerformance.LoadingServer</AssemblyName>
+    <RootNamespace>TarkovPerformanceSuite.Server</RootNamespace>
+    <OutputType>Library</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <SptServerRoot Condition="'$(SptServerRoot)' == ''">$(SPT_SERVER_ROOT)</SptServerRoot>
+    <OutputPath>bin\$(Configuration)\TarkovPerformanceLoadingServer\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <Target Name="ValidateSptServerRoot" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(SptServerRoot)' == ''" Text="Set SPT_SERVER_ROOT or pass /p:SptServerRoot=..." />
+    <Error Condition="!Exists('$(SptServerRoot)\SPTarkov.Server.Core.dll')" Text="SPTarkov.Server.Core.dll was not found under $(SptServerRoot)." />
+  </Target>
+
+  <ItemGroup>
+    <Reference Include="0Harmony" HintPath="$(SptServerRoot)\0Harmony.dll" Private="false" />
+    <Reference Include="SemanticVersioning" HintPath="$(SptServerRoot)\SemanticVersioning.dll" Private="false" />
+    <Reference Include="SPTarkov.Common" HintPath="$(SptServerRoot)\SPTarkov.Common.dll" Private="false" />
+    <Reference Include="SPTarkov.DI" HintPath="$(SptServerRoot)\SPTarkov.DI.dll" Private="false" />
+    <Reference Include="SPTarkov.Server.Core" HintPath="$(SptServerRoot)\SPTarkov.Server.Core.dll" Private="false" />
+  </ItemGroup>
+</Project>

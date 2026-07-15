@@ -24,7 +24,7 @@ Fika's documentation says a headless raid host offloads AI calculations and othe
 
 Unity documents that disabling `SkinnedMeshRenderer.updateWhenOffscreen` stops offscreen skinned-mesh updates and can affect bounds for animation that exceeds imported bounds. The experiment is therefore distance-, visibility-, and hold-time-gated and immediately reversible through the Num4 A/B master.
 
-No external mod source code was copied. The implementation is original and uses public APIs plus installed metadata inspection; PiP-Disabler's MIT source was consulted only to corroborate the installed optic-camera path.
+The suite's own performance features are original. Version 0.16.0 additionally packages the unmodified MIT-licensed PiP-Disabler 1.5.0 plugin, with its license and attribution, because a safe no-PiP mode requires its complete reticle, lens-mask, camera alignment, and scope-housing implementation.
 
 ## Version 0.4 findings and mapping
 
@@ -45,4 +45,4 @@ The same friend Woods capture delivered 41.1 effective FPS with a 24.3 ms main t
 - Unity renders a camera with `targetTexture` into the whole render texture; changing `rect` or covering the outside of the scope does not avoid that render. See https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Camera-targetTexture.html.
 - Although Unity supports manually invoking `Camera.Render()`, the live 0.7 report measured roughly 4.1 ms in the suite's manual optic render and disabling HDR broke scope composition. Version 0.8 therefore never disables, manually renders, or rate-limits the optic camera and never mutates HDR.
 - Unity supports per-camera occlusion and layer culling, but Tarkov's layer semantics make generic distance cuts unsafe for targets seen through magnified optics. The retained implementation changes normal-optic resolution and optional MSAA only, leaving scheduling, HDR, culling masks, and far distance intact.
-- PiP-Disabler's current source confirms the same global base optic camera and updater path, but replaces PiP with main-camera FOV zoom. It is useful compatibility evidence, not the behavior implemented here: https://github.com/Fiodorwellfme/PiP-Disabler.
+- PiP-Disabler replaces the global base optic camera with main-camera FOV zoom while maintaining reticle, lens mask and scope housing. Version 0.16.0 packages and coordinates that implementation: https://github.com/Fiodorwellfme/PiP-Disabler.

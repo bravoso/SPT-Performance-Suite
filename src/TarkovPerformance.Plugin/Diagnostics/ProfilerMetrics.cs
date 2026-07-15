@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Text;
 using BepInEx.Logging;
 using Unity.Profiling;
@@ -22,6 +23,23 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         internal ProfilerMarkerDataUnit UnitType { get; }
         internal bool Valid => _recorder.Valid;
         internal long? LastValue => _recorder.Valid && _recorder.Count > 0 ? _recorder.LastValue : (long?)null;
+        internal long CaptureSamples { get; private set; }
+        internal double CaptureSum { get; private set; }
+        internal long CaptureMaximum { get; private set; }
+        internal void ResetCapture()
+        {
+            CaptureSamples = 0;
+            CaptureSum = 0;
+            CaptureMaximum = 0;
+        }
+        internal void SampleCapture()
+        {
+            long? value = LastValue;
+            if (!value.HasValue) return;
+            CaptureSamples++;
+            CaptureSum += value.Value;
+            if (value.Value > CaptureMaximum) CaptureMaximum = value.Value;
+        }
         public void Dispose() { if (_recorder.Valid) _recorder.Dispose(); }
     }
 
@@ -30,8 +48,10 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         private static readonly string[] DesiredNames =
         {
             "Main Thread", "Render Thread", "GC Allocated In Frame", "GC Reserved Memory", "System Used Memory",
-            "GC Used Memory", "App Resident Memory", "Video Used Memory", "Draw Calls Count", "Batches Count",
-            "SetPass Calls Count", "Triangles Count", "Vertices Count", "Shadow Casters Count", "Visible Skinned Meshes Count"
+            "GC Used Memory", "App Resident Memory", "App Committed Memory", "Video Used Memory", "Video Reserved Memory",
+            "Video Memory Bytes", "Render Textures Bytes", "Render Textures Count", "Used Buffers Bytes", "Used Buffers Count",
+            "Draw Calls Count", "Batches Count", "SetPass Calls Count", "Triangles Count", "Vertices Count",
+            "Shadow Casters Count", "Visible Skinned Meshes Count"
         };
 
         private readonly Dictionary<string, ProfilerMetric> _metrics = new Dictionary<string, ProfilerMetric>(StringComparer.OrdinalIgnoreCase);
@@ -95,6 +115,51 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                     builder.Append((value.Value / 1048576.0d).ToString("F2")).AppendLine(" MiB");
                 else builder.Append(value.Value).AppendLine(" " + metric.UnitType);
             }
+        }
+
+        internal void BeginCapture()
+        {
+            foreach (ProfilerMetric metric in _metrics.Values) metric.ResetCapture();
+        }
+
+        internal void SampleCapture()
+        {
+            foreach (ProfilerMetric metric in _metrics.Values) metric.SampleCapture();
+        }
+
+        internal string BuildCumulativeReport()
+        {
+            var metrics = new List<ProfilerMetric>(_metrics.Values);
+            metrics.Sort((left, right) => right.CaptureSum.CompareTo(left.CaptureSum));
+            var builder = new StringBuilder(4096);
+            builder.AppendLine("Unity profiler markers accumulated across captured frames");
+            builder.AppendLine("Timing totals are sums of the marker's per-frame value. Unity markers can be nested, so do not add rows together.");
+            builder.AppendLine("metric | unit | samples | average | maximum | cumulative");
+            for (int i = 0; i < metrics.Count; i++)
+            {
+                ProfilerMetric metric = metrics[i];
+                if (metric.CaptureSamples == 0) continue;
+                double average = metric.CaptureSum / metric.CaptureSamples;
+                builder.Append(metric.Name).Append(" | ").Append(metric.UnitType).Append(" | ").Append(metric.CaptureSamples).Append(" | ");
+                if (metric.UnitType == ProfilerMarkerDataUnit.TimeNanoseconds)
+                {
+                    builder.Append((average * 0.000001d).ToString("F4", CultureInfo.InvariantCulture)).Append(" ms | ")
+                        .Append((metric.CaptureMaximum * 0.000001d).ToString("F4", CultureInfo.InvariantCulture)).Append(" ms | ")
+                        .Append((metric.CaptureSum * 0.000001d).ToString("F2", CultureInfo.InvariantCulture)).AppendLine(" ms");
+                }
+                else if (metric.UnitType == ProfilerMarkerDataUnit.Bytes)
+                {
+                    builder.Append((average / 1048576.0d).ToString("F2", CultureInfo.InvariantCulture)).Append(" MiB | ")
+                        .Append((metric.CaptureMaximum / 1048576.0d).ToString("F2", CultureInfo.InvariantCulture)).Append(" MiB | n/a").AppendLine();
+                }
+                else
+                {
+                    builder.Append(average.ToString("F2", CultureInfo.InvariantCulture)).Append(" | ")
+                        .Append(metric.CaptureMaximum).Append(" | ")
+                        .Append(metric.CaptureSum.ToString("F0", CultureInfo.InvariantCulture)).AppendLine();
+                }
+            }
+            return builder.ToString();
         }
 
         internal void WriteAvailableReport(string path)

@@ -19,6 +19,7 @@
     <Reference Include="BepInEx" HintPath="$(BepInExCoreDir)\BepInEx.dll" Private="false" />
     <Reference Include="0Harmony" HintPath="$(BepInExCoreDir)\0Harmony.dll" Private="false" />
     <Reference Include="Assembly-CSharp" HintPath="$(ManagedDir)\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="ItemComponent.Types" HintPath="$(ManagedDir)\ItemComponent.Types.dll" Private="false" />
     <Reference Include="Comfort" HintPath="$(ManagedDir)\Comfort.dll" Private="false" />
     <Reference Include="Comfort.Unity" HintPath="$(ManagedDir)\Comfort.Unity.dll" Private="false" />
     <Reference Include="UnityEngine" HintPath="$(ManagedDir)\UnityEngine.dll" Private="false" />
@@ -33,4 +34,3 @@
     <Reference Include="UnityEngine.TextRenderingModule" HintPath="$(ManagedDir)\UnityEngine.TextRenderingModule.dll" Private="false" />
   </ItemGroup>
 </Project>
-

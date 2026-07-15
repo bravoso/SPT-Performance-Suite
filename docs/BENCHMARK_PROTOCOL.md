@@ -24,7 +24,7 @@ Do not claim a performance gain from a single run.
 
 ## Procedure
 
-1. Use a disposable SPT profile or controlled preset. Disable PiP-Disabler when measuring the suite's real-PiP scope budget.
+1. Use a disposable SPT profile or controlled preset. Record whether Num3 selected main-camera zoom or full-resolution vanilla PiP.
 2. Use the same map and approximately the same location and viewing direction.
 3. Allow at least 60 seconds of warm-up.
 4. Press Num8 for the configured 120-second capture.

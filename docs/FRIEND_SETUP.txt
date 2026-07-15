@@ -1,18 +1,28 @@
-TARKOV PERFORMANCE SUITE 0.8.0 - OLD CPU PROFILE
+TARKOV PERFORMANCE SUITE 1.0 - PRODUCTION INSTALL
 
-1. Close SPT/Escape from Tarkov.
-2. Copy the BepInEx folder from this package into the SPT game folder.
-3. Start the game normally. The OldCpuAggressive preset is already selected.
-4. In raid, Num4 toggles ALL optimizations for a same-raid A/B test. The panel must clearly say OPTIMIZATIONS ON or OFF.
-5. Num7 toggles the compact panel, Num8 starts/stops repeating 120-second reports, and Num9 writes an immediate report.
-6. For a useful Woods test, leave Num8 recording and alternate ON/OFF every 45-60 seconds while travelling through comparable areas. Ignore the first five seconds after each switch.
-7. To test the suite's real-PiP optimizer, disable/remove PiP-Disabler first. If PiP-Disabler has removed the optic camera, this suite correctly has nothing left to optimize.
-8. Press F12 and search for "Tarkov Performance Suite" to change the preset or any setting.
+1. Close SPT and Escape from Tarkov.
+2. Extract this package into the SPT game folder. Keep the BepInEx and SPT folder structure.
+3. If the SPT server is on another computer, move SPT\user\mods\TarkovPerformanceLoadingServer to that real server. Installing it beside a remote client does nothing.
+4. With Fika, install the BepInEx files on every playable client and headless client. Install the SPT server folder once on the real server.
+5. Start normally. Extreme optimizations are enabled. The diagnostics panel, bot counter, method profiler, and report writers are disabled by default.
+6. Press F12 and search for Tarkov Performance Suite to choose Balanced, Performance, Extreme, or Custom and to enable diagnostics.
 
-This profile does not change AI decisions, damage, networking, bot count, navigation, or LOD. It temporarily exposes every logical processor to the game during a raid, restoring the original process-affinity mask when Num4 is OFF or the raid ends. It trades some texture/shadow/effect quality for headroom; reduces presentation-only arms/body/IK/late-update work for remote characters that EFT/Fika already reports as hidden; skips distant cosmetic casing physics; limits client-only bullet-flyby scans to 30 per second; smooths background upload work; reuses physics callback objects; suppresses one verified per-projectile info-log hot path; enables conservative cosmetic decluttering; and renders magnified PiP scopes at half internal resolution. PiP HDR and refresh cadence are always left at Tarkov's vanilla values. Thermal and night-vision optics are left unchanged.
+HOTKEYS
+Num4 = toggle all gameplay optimizations for A/B testing
+Num3 = no-PiP scope replacement / full-resolution vanilla PiP
+Num7 = diagnostics panel
+Num8 = start/stop repeating profiler captures
+Num9 = write an immediate diagnostic report
 
-During Num8 captures, diagnostics time verified EFT/Fika world-tick, ballistics, culling, effects, audio, player, shell, and installed-mod frame methods. This profiling is capture-only. Do not add nested method times together.
+Gameplay config changes save immediately and apply in the running game. Loading and server settings are startup settings and need a process restart.
 
-To uninstall, remove:
-BepInEx\plugins\TarkovPerformanceSuite
-BepInEx\config\com.lucaswilluweit.tarkovperformancesuite.cfg
+Fika, Dynamic Maps, SAIN, ORBIT, and BigBrain are optional. Missing optional mods are skipped safely. Ordinary non-Fika SPT works. The server companion is optional.
+
+PiP-Disabler 1.5.0 is included unmodified under the MIT license. See THIRD_PARTY_NOTICES.md.
+
+TO UNINSTALL
+Remove BepInEx\plugins\TarkovPerformanceSuite
+Remove BepInEx\plugins\PiP-Disabler if it was installed only by this package
+Remove BepInEx\config\com.lucaswilluweit.tarkovperformancesuite.cfg
+Remove BepInEx\config\com.lucaswilluweit.tarkovperformancesuite.loading.cfg
+Remove SPT\user\mods\TarkovPerformanceLoadingServer

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
+using BepInEx.Configuration;
 using TarkovPerformanceSuite.Diagnostics;
 using TarkovPerformanceSuite.Features;
 using TarkovPerformanceSuite.Utilities;
@@ -26,6 +27,7 @@ namespace TarkovPerformanceSuite.Tests
             Run("original-state restore", TestStateCache);
             Run("version comparison", TestVersions);
             Run("method signature fingerprint", TestFingerprint);
+            Run("BepInEx config persistence", TestConfigPersistence);
             Console.WriteLine($"Passed: {_passed}; Failed: {_failed}");
             return _failed == 0 ? 0 : 1;
         }
@@ -50,7 +52,12 @@ namespace TarkovPerformanceSuite.Tests
                 StartedUtc = "2026-01-01T00:00:00Z",
                 MapName = "factory4_day",
                 EnabledFeatures = "shadow=false",
-                Samples = new[] { new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1, ShadowEffectiveDistance = 75, ShadowDisabledRendererCount = 20, SkinningModifiedRendererCount = 4, RemoteLodFarAiCount = 3, RemoteLodForcedGroupCount = 8, DeclutterHiddenRendererCount = 120, RemoteBudgetedCharacterCount = 6, RemoteSkippedPropUpdates = 42, RemoteSkippedPresentationUpdates = 84, OptimizationsEnabled = true, PipScopeActive = true, PipScopeSourceResolution = 1024, PipScopeOptimizedResolution = 512, PipScopeRenderedFrames = 20, PipScopeReusedFrames = 40, PipScopeAverageRenderMs = 1.25, CompatibilityFastWorldLookups = 8 } }
+                Samples = new[]
+                {
+                    new BenchmarkSample { TimestampSeconds = 1, FrameTimeMs = 10, Fps = 100, MainThreadMs = 7, GpuFrameMs = 4, WaitForTargetFpsMs = 2, PlayerCount = 2, AiCount = 1, BakedCullingEntityCount = 1, BakedHiddenEntityCount = 1, ShadowEffectiveDistance = 75, ShadowDisabledRendererCount = 20, SkinningModifiedRendererCount = 4, RemoteLodFarAiCount = 3, RemoteLodForcedGroupCount = 8, DeclutterHiddenRendererCount = 120, AreaLightReusedCommandBuffers = 200, AreaLightRebuiltCommandBuffers = 50, RemoteBudgetedCharacterCount = 6, RemoteSkippedPropUpdates = 42, RemoteSkippedPresentationUpdates = 84, OptimizationsEnabled = true, PipScopeActive = true, PipRenderingDisabled = true, PipScopeSourceResolution = 1024, PipScopeOptimizedResolution = 512, PipScopeRenderedFrames = 20, PipScopeReusedFrames = 40, PipScopeAverageRenderMs = 1.25, CompatibilityFastWorldLookups = 8 },
+                    new BenchmarkSample { TimestampSeconds = 999, FrameTimeMs = 999, Fps = 999 }
+                },
+                SampleCount = 1
             };
             var csv = new StringWriter(); BenchmarkSerializer.WriteCsv(csv, export);
             var json = new StringWriter(); BenchmarkSerializer.WriteJson(json, export);
@@ -60,17 +67,21 @@ namespace TarkovPerformanceSuite.Tests
             True(csv.ToString().Contains("remote_lod_forced_group_count"));
             True(csv.ToString().Contains(",120,"));
             True(csv.ToString().Contains("shadow=false"));
+            True(!csv.ToString().Contains("999"));
             True(json.ToString().Contains("factory4_day"));
             True(json.ToString().Contains("\"frameTimeMs\":10"));
             True(json.ToString().Contains("\"gpuFrameMs\":4"));
             True(json.ToString().Contains("\"shadowEffectiveDistance\":75"));
             True(json.ToString().Contains("\"remoteLodForcedGroupCount\":8"));
             True(json.ToString().Contains("\"declutterHiddenRendererCount\":120"));
+            True(json.ToString().Contains("\"bakedHiddenEntityCount\":1"));
+            True(json.ToString().Contains("\"areaLightReusedCommandBuffers\":200"));
             True(json.ToString().Contains("\"remoteBudgetedCharacterCount\":6"));
             True(json.ToString().Contains("\"remoteSkippedPropUpdates\":42"));
             True(json.ToString().Contains("\"remoteSkippedPresentationUpdates\":84"));
             True(json.ToString().Contains("\"optimizationsEnabled\":true"));
             True(json.ToString().Contains("\"pipScopeOptimizedResolution\":512"));
+            True(json.ToString().Contains("\"pipRenderingDisabled\":true"));
             True(json.ToString().Contains("\"pipScopeReusedFrames\":40"));
             True(json.ToString().Contains("\"compatibilityFastWorldLookups\":8"));
         }
@@ -148,6 +159,28 @@ namespace TarkovPerformanceSuite.Tests
             string text = MethodSignatureFingerprint.Describe(method);
             True(text.Contains("System.String::StartsWith(System.String)->System.Boolean"));
             Equal(64, MethodSignatureFingerprint.Sha256(method).Length);
+        }
+
+        private static void TestConfigPersistence()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "tps-config-test-" + Guid.NewGuid().ToString("N") + ".cfg");
+            try
+            {
+                var first = new ConfigFile(path, true) { SaveOnConfigSet = true };
+                ConfigEntry<bool> entry = first.Bind("Production", "Enabled", true, "Persistence test");
+                entry.Value = false;
+                first.Save();
+                True(File.Exists(path));
+                True(File.ReadAllText(path).Contains("Enabled = false"));
+
+                var reloaded = new ConfigFile(path, true);
+                ConfigEntry<bool> loaded = reloaded.Bind("Production", "Enabled", true, "Persistence test");
+                Equal(false, loaded.Value);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
         }
 
         private static void Run(string name, Action test)

@@ -1,0 +1,7 @@
+{
+  "workerThreadsPerLogicalCpu": 2,
+  "raiseProcessPriority": true,
+  "fastCompression": true,
+  "writeReports": false,
+  "slowRequestThresholdMs": 250
+}

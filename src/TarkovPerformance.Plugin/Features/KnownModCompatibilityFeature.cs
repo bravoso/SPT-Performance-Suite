@@ -96,7 +96,14 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             if (!IsEnabled || _botCounterTarget != null) return;
             try
             {
-                if (!Chainloader.PluginInfos.TryGetValue("com.yourname.botcounter", out var pluginInfo))
+                BepInEx.PluginInfo pluginInfo = null;
+                foreach (KeyValuePair<string, BepInEx.PluginInfo> pair in Chainloader.PluginInfos)
+                {
+                    if (!string.Equals(pair.Value?.Metadata?.GUID, "com.yourname.botcounter", StringComparison.OrdinalIgnoreCase)) continue;
+                    pluginInfo = pair.Value;
+                    break;
+                }
+                if (pluginInfo == null)
                 {
                     // Plugin discovery is complete before plugin Awake methods run. Do not repeatedly
                     // scan every loaded type when the optional mod is absent; that caused a 0.5 s

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using EFT;
 using TarkovPerformanceSuite.FikaAdapter;
 using TarkovPerformanceSuite.Features;
@@ -11,27 +12,34 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
     {
         internal Player Player;
         internal EntityKind Kind;
+        internal bool IsPresentationProxy;
         internal int SeenGeneration;
         internal float NextComponentRefresh;
         internal bool IsAlive;
         internal bool IsVisible;
+        internal bool HasBakedCullingVisibility;
+        internal bool IsBakedCullingVisible;
+        internal float LastVisibleTime;
         internal float DistanceSquared;
         internal Animator[] Animators = Array.Empty<Animator>();
         internal Renderer[] Renderers = Array.Empty<Renderer>();
+        internal Light[] Lights = Array.Empty<Light>();
         internal SkinnedMeshRenderer[] SkinnedRenderers = Array.Empty<SkinnedMeshRenderer>();
         internal LODGroup[] LodGroups = Array.Empty<LODGroup>();
         internal readonly List<Animator> AnimatorBuffer = new List<Animator>(8);
         internal readonly List<Renderer> RendererBuffer = new List<Renderer>(32);
+        internal readonly List<Light> LightBuffer = new List<Light>(8);
         internal readonly List<SkinnedMeshRenderer> SkinnedBuffer = new List<SkinnedMeshRenderer>(24);
         internal readonly List<LODGroup> LodBuffer = new List<LODGroup>(8);
     }
 
     internal readonly struct EntityCounts
     {
-        internal EntityCounts(int players, int local, int remoteHuman, int ai, int livingAi, int visibleAi, int corpses, int animators, int skinned, int shadow)
+        internal EntityCounts(int players, int local, int remoteHuman, int ai, int livingAi, int visibleAi, int bakedCullingEntities, int bakedHiddenEntities, int corpses, int animators, int skinned, int shadow)
         {
             Players = players; LocalPlayers = local; RemoteHumans = remoteHuman; Ai = ai; LivingAi = livingAi;
-            VisibleAi = visibleAi; Corpses = corpses; Animators = animators; SkinnedRenderers = skinned; ShadowRenderers = shadow;
+            VisibleAi = visibleAi; BakedCullingEntities = bakedCullingEntities; BakedHiddenEntities = bakedHiddenEntities;
+            Corpses = corpses; Animators = animators; SkinnedRenderers = skinned; ShadowRenderers = shadow;
         }
         internal int Players { get; }
         internal int LocalPlayers { get; }
@@ -39,6 +47,8 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         internal int Ai { get; }
         internal int LivingAi { get; }
         internal int VisibleAi { get; }
+        internal int BakedCullingEntities { get; }
+        internal int BakedHiddenEntities { get; }
         internal int Corpses { get; }
         internal int Animators { get; }
         internal int SkinnedRenderers { get; }
@@ -103,11 +113,17 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             return _haveLocalPosition;
         }
 
+        internal bool TryGet(Player player, out TrackedEntity entity)
+        {
+            entity = null;
+            return player != null && _entities.TryGetValue(player.GetInstanceID(), out entity);
+        }
+
         internal EntityCounts CountNow(float now)
         {
             if (now < _nextCountRefresh) return _cachedCounts;
             _nextCountRefresh = now + 0.25f;
-            int players = 0, local = 0, humans = 0, ai = 0, livingAi = 0, visibleAi = 0, animators = 0, skinned = 0, shadows = 0;
+            int players = 0, local = 0, humans = 0, ai = 0, livingAi = 0, visibleAi = 0, baked = 0, bakedHidden = 0, animators = 0, skinned = 0, shadows = 0;
             foreach (TrackedEntity entity in _entities.Values)
             {
                 Player player = entity.Player;
@@ -127,11 +143,16 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                     }
                     if (entity.IsVisible) visibleAi++;
                 }
+                if (entity.HasBakedCullingVisibility)
+                {
+                    baked++;
+                    if (!entity.IsBakedCullingVisible) bakedHidden++;
+                }
                 for (int i = 0; i < entity.Animators.Length; i++) if (entity.Animators[i] != null && entity.Animators[i].isActiveAndEnabled) animators++;
                 for (int i = 0; i < entity.SkinnedRenderers.Length; i++) if (entity.SkinnedRenderers[i] != null && entity.SkinnedRenderers[i].enabled && entity.SkinnedRenderers[i].gameObject.activeInHierarchy) skinned++;
             }
             int corpses = _world != null && _world.ObservedPlayersCorpses != null ? _world.ObservedPlayersCorpses.Count : 0;
-            _cachedCounts = new EntityCounts(players, local, humans, ai, livingAi, visibleAi, corpses, animators, skinned, shadows);
+            _cachedCounts = new EntityCounts(players, local, humans, ai, livingAi, visibleAi, baked, bakedHidden, corpses, animators, skinned, shadows);
             return _cachedCounts;
         }
 
@@ -154,7 +175,13 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             int id = player.GetInstanceID();
             if (!_entities.TryGetValue(id, out TrackedEntity entity))
             {
-                entity = new TrackedEntity { Player = player, Kind = RuntimeEntityClassifier.Classify(player), NextComponentRefresh = 0 };
+                entity = new TrackedEntity
+                {
+                    Player = player,
+                    Kind = RuntimeEntityClassifier.Classify(player),
+                    IsPresentationProxy = FikaEntityAdapter.IsObservedPlayer(player),
+                    NextComponentRefresh = 0
+                };
                 _entities.Add(id, entity);
             }
             entity.SeenGeneration = _generation;
@@ -163,15 +190,18 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 Transform root = player.PlayerBody != null ? player.PlayerBody.transform : player.gameObject.transform;
                 entity.AnimatorBuffer.Clear();
                 entity.RendererBuffer.Clear();
+                entity.LightBuffer.Clear();
                 entity.SkinnedBuffer.Clear();
                 entity.LodBuffer.Clear();
                 root.GetComponentsInChildren(true, entity.AnimatorBuffer);
                 root.GetComponentsInChildren(true, entity.RendererBuffer);
+                root.GetComponentsInChildren(true, entity.LightBuffer);
                 root.GetComponentsInChildren(true, entity.LodBuffer);
                 for (int i = 0; i < entity.RendererBuffer.Count; i++)
                     if (entity.RendererBuffer[i] is SkinnedMeshRenderer skinned) entity.SkinnedBuffer.Add(skinned);
                 entity.Animators = CopyToStableArray(entity.AnimatorBuffer, entity.Animators);
                 entity.Renderers = CopyToStableArray(entity.RendererBuffer, entity.Renderers);
+                entity.Lights = CopyToStableArray(entity.LightBuffer, entity.Lights);
                 entity.SkinnedRenderers = CopyToStableArray(entity.SkinnedBuffer, entity.SkinnedRenderers);
                 entity.LodGroups = CopyToStableArray(entity.LodBuffer, entity.LodGroups);
                 entity.NextComponentRefresh = now + 12f + ((id & int.MaxValue) % 7) * 0.37f;
@@ -197,8 +227,13 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 if (player == null) continue;
                 entity.IsAlive = player.HealthController != null && player.HealthController.IsAlive;
                 entity.DistanceSquared = _haveLocalPosition ? (player.Transform.position - _localPosition).sqrMagnitude : 0f;
-                bool visible = player.IsYourPlayer || player.IsVisible;
-                if (!visible)
+                entity.HasBakedCullingVisibility = EftBakedCullingAdapter.TryRead(player, out bool bakedVisible);
+                entity.IsBakedCullingVisible = !entity.HasBakedCullingVisibility || bakedVisible;
+                bool visible = player.IsYourPlayer || (entity.HasBakedCullingVisibility ? bakedVisible : player.IsVisible);
+                // Renderer.isVisible is only a fallback when the stronger map-grid signal is
+                // unavailable. Otherwise a renderer from a previous camera/frame can promote a
+                // character that EFT has already proven is behind baked map occlusion.
+                if (!visible && !entity.HasBakedCullingVisibility)
                 {
                     for (int i = 0; i < entity.Renderers.Length; i++)
                     {
@@ -211,6 +246,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                     }
                 }
                 entity.IsVisible = visible;
+                if (visible) entity.LastVisibleTime = Time.realtimeSinceStartup;
             }
         }
 
@@ -231,6 +267,35 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         private static float Clamp(float value, float minimum, float maximum)
             => float.IsNaN(value) || float.IsInfinity(value) ? minimum : value < minimum ? minimum : value > maximum ? maximum : value;
+    }
+
+    internal static class EftBakedCullingAdapter
+    {
+        private static readonly FieldInfo CullingHandlerField = typeof(LocalPlayer).GetField(
+            "localPlayerCullingHandlerClass", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        internal static bool IsAvailable => CullingHandlerField != null;
+
+        internal static bool TryRead(Player player, out bool visible)
+        {
+            visible = true;
+            if (CullingHandlerField == null || !(player is LocalPlayer localPlayer)) return false;
+            try
+            {
+                if (!(CullingHandlerField.GetValue(localPlayer) is LocalPlayerCullingHandlerClass handler)
+                    || handler.Mode != GClass917.EMode.Auto
+                    || handler.Gclass999_0 == null
+                    || !handler.Gclass999_0.Bool_6)
+                    return false;
+                visible = handler.IsVisible;
+                return true;
+            }
+            catch
+            {
+                visible = true;
+                return false;
+            }
+        }
     }
 
     internal static class RuntimeEntityClassifier

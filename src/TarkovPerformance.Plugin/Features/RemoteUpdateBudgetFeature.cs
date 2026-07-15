@@ -14,11 +14,15 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 {
     internal readonly struct RemoteUpdateBudgetCounters
     {
-        internal RemoteUpdateBudgetCounters(int remote, int hidden, int budgeted, int animators, long skippedProps, long skippedTriggers, long skippedPresentation, double averageMs)
+        internal RemoteUpdateBudgetCounters(int remote, int hidden, int bakedHidden, int budgeted, int visibleDistant, int frozenHidden,
+            int animators, long skippedProps, long skippedTriggers, long skippedPresentation, double averageMs)
         {
             RemoteCharacters = remote;
             HiddenCharacters = hidden;
+            BakedHiddenCharacters = bakedHidden;
             BudgetedCharacters = budgeted;
+            VisibleDistantCharacters = visibleDistant;
+            FrozenHiddenCharacters = frozenHidden;
             CulledAnimators = animators;
             SkippedPropUpdates = skippedProps;
             SkippedTriggerSearches = skippedTriggers;
@@ -28,7 +32,10 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         internal int RemoteCharacters { get; }
         internal int HiddenCharacters { get; }
+        internal int BakedHiddenCharacters { get; }
         internal int BudgetedCharacters { get; }
+        internal int VisibleDistantCharacters { get; }
+        internal int FrozenHiddenCharacters { get; }
         internal int CulledAnimators { get; }
         internal long SkippedPropUpdates { get; }
         internal long SkippedTriggerSearches { get; }
@@ -46,14 +53,11 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private readonly RecentExceptionLog _exceptions;
         private readonly CircuitBreaker _breaker = new CircuitBreaker(3);
         private readonly HashSet<int> _budgetedIds = new HashSet<int>();
+        private readonly HashSet<int> _distantVisibleIds = new HashSet<int>();
+        private readonly HashSet<int> _hardFrozenIds = new HashSet<int>();
+        private readonly HashSet<int> _bakedHiddenIds = new HashSet<int>();
         private readonly HashSet<int> _seenIds = new HashSet<int>();
         private readonly Dictionary<int, float> _hiddenSince = new Dictionary<int, float>(64);
-        private readonly Dictionary<int, int> _propCallCounters = new Dictionary<int, int>(64);
-        private readonly Dictionary<int, int> _triggerCallCounters = new Dictionary<int, int>(64);
-        private readonly Dictionary<int, int> _armsCallCounters = new Dictionary<int, int>(64);
-        private readonly Dictionary<int, int> _bodyCallCounters = new Dictionary<int, int>(64);
-        private readonly Dictionary<int, int> _ikCallCounters = new Dictionary<int, int>(64);
-        private readonly Dictionary<int, int> _complexLateCallCounters = new Dictionary<int, int>(64);
         private readonly Dictionary<Animator, AnimatorCullingMode> _animatorStates = new Dictionary<Animator, AnimatorCullingMode>(256);
         private readonly HashSet<Animator> _seenAnimators = new HashSet<Animator>();
         private readonly List<Animator> _animatorRestore = new List<Animator>(64);
@@ -75,6 +79,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private long _skippedPresentation;
         private double _averageMs;
         private RemoteUpdateBudgetCounters _counters;
+        private bool _isHeadlessAuthority;
 
         internal RemoteUpdateBudgetFeature(ManualLogSource logger, PluginConfiguration configuration, EntityRegistry registry, RecentExceptionLog exceptions)
         {
@@ -88,7 +93,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         public bool IsAvailable => !_breaker.IsOpen;
         public bool IsEnabled { get; private set; }
         internal RemoteUpdateBudgetCounters Counters => _counters;
-        internal string StatusText => IsEnabled
+        internal string StatusText => _isHeadlessAuthority ? "headless authority bypass (gameplay updates preserved)" : IsEnabled
             ? (_patchesInstalled ? "enabled" : "animator-only")
             : _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
 
@@ -103,6 +108,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         public void OnRaidStarted()
         {
             InstallOptionalFikaPatches();
+            _isHeadlessAuthority = DetectFikaHeadless();
             _raidActive = true;
             _nextUpdate = 0;
             _skippedProps = 0;
@@ -162,7 +168,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         internal void Tick(float now)
         {
-            if (!IsEnabled || !_raidActive || now < _nextUpdate) return;
+            if (!IsEnabled || !_raidActive || _isHeadlessAuthority || now < _nextUpdate) return;
             float interval = Clamp(_configuration.RemoteUpdateBudgetInterval.Value, 0.033f, 0.5f);
             _nextUpdate = now + interval;
             long started = Stopwatch.GetTimestamp();
@@ -191,13 +197,24 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         private void Process(float now)
         {
+            if (_isHeadlessAuthority)
+            {
+                RestoreAll();
+                _counters = default;
+                return;
+            }
             float minimumDistance = Clamp(_configuration.RemoteUpdateBudgetDistance.Value, 20f, 200f);
             float minimumDistanceSquared = minimumDistance * minimumDistance;
+            float aggressiveDistance = Clamp(_configuration.RemoteAggressivePresentationDistance.Value, 40f, 200f);
+            float aggressiveDistanceSquared = aggressiveDistance * aggressiveDistance;
             float hold = Clamp(_configuration.RemoteUpdateBudgetHold.Value, 0.05f, 2f);
             int remote = 0;
             int hidden = 0;
             _seenIds.Clear();
             _seenAnimators.Clear();
+            _bakedHiddenIds.Clear();
+            _distantVisibleIds.Clear();
+            _hardFrozenIds.Clear();
 
             foreach (TrackedEntity entity in _registry.Entities)
             {
@@ -205,22 +222,36 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 remote++;
                 int id = entity.Player.GetInstanceID();
                 _seenIds.Add(id);
+                // Only Fika ObservedPlayer objects are client-side presentation proxies. Never
+                // suppress Player arms/late updates for authoritative SPT bots or the headless
+                // host, where the same methods can advance hands, ballistics and AI state.
+                if (!entity.IsPresentationProxy)
+                {
+                    _hiddenSince.Remove(id);
+                    _budgetedIds.Remove(id);
+                    RestoreAnimators(entity.Animators);
+                    continue;
+                }
+
+                if (entity.IsAlive && entity.IsVisible && entity.DistanceSquared >= aggressiveDistanceSquared)
+                {
+                    _distantVisibleIds.Add(id);
+                    _hiddenSince.Remove(id);
+                    _budgetedIds.Remove(id);
+                    RestoreAnimators(entity.Animators);
+                    continue;
+                }
                 bool eligible = entity.IsAlive && !entity.IsVisible && entity.DistanceSquared >= minimumDistanceSquared;
                 if (!eligible)
                 {
                     _hiddenSince.Remove(id);
                     _budgetedIds.Remove(id);
-                    _propCallCounters.Remove(id);
-                    _triggerCallCounters.Remove(id);
-                    _armsCallCounters.Remove(id);
-                    _bodyCallCounters.Remove(id);
-                    _ikCallCounters.Remove(id);
-                    _complexLateCallCounters.Remove(id);
                     RestoreAnimators(entity.Animators);
                     continue;
                 }
 
                 hidden++;
+                if (entity.HasBakedCullingVisibility && !entity.IsBakedCullingVisible) _bakedHiddenIds.Add(id);
                 if (!_hiddenSince.TryGetValue(id, out float since))
                 {
                     _hiddenSince.Add(id, now);
@@ -229,6 +260,8 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 if (now - since < hold) continue;
 
                 _budgetedIds.Add(id);
+                if (_configuration.RemoteFreezeHiddenPresentation.Value && entity.DistanceSquared >= aggressiveDistanceSquared)
+                    _hardFrozenIds.Add(id);
                 if (!_configuration.RemoteAnimatorCullingEnabled.Value) continue;
                 for (int i = 0; i < entity.Animators.Length; i++)
                 {
@@ -241,7 +274,9 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             }
 
             RestoreNoLongerEligible();
-            _counters = new RemoteUpdateBudgetCounters(remote, hidden, _budgetedIds.Count, _animatorStates.Count, _skippedProps, _skippedTriggers, _skippedPresentation, _averageMs);
+            _counters = new RemoteUpdateBudgetCounters(remote, hidden, _bakedHiddenIds.Count, _budgetedIds.Count,
+                _distantVisibleIds.Count, _hardFrozenIds.Count, _animatorStates.Count, _skippedProps, _skippedTriggers,
+                _skippedPresentation, _averageMs);
         }
 
         private bool ShouldRun(Player player, BudgetedUpdate update)
@@ -250,24 +285,51 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             // ComplexLateUpdate contains presentation sub-passes on some EFT builds. If its
             // outer budget allowed this player, do not divide nested arms/body/IK a second time.
             if (update != BudgetedUpdate.ComplexLate && _allowedComplexLatePlayerId == player.GetInstanceID()) return true;
-            // Never wait for the amortized registry refresh when EFT/Fika has already
-            // promoted the character to visible this frame.
-            if (player.IsVisible) return true;
+            int id = player.GetInstanceID();
             if (update >= BudgetedUpdate.Arms && !_configuration.RemotePresentationBudgetEnabled.Value) return true;
             if (update == BudgetedUpdate.ComplexLate && !_configuration.RemoteComplexLateUpdateBudgetEnabled.Value) return true;
-            int id = player.GetInstanceID();
-            if (!_budgetedIds.Contains(id)) return true;
+            bool visibleDistant = _distantVisibleIds.Contains(id);
+            bool hiddenBudget = _budgetedIds.Contains(id);
+            if (!visibleDistant && !hiddenBudget) return true;
+
+            // The registry is intentionally sampled rather than queried from every callback.
+            // Fail open immediately if the proxy crossed back inside the aggressive radius.
+            if (_registry.TryGet(player, out TrackedEntity entity) && _registry.TryGetLocalPosition(out Vector3 localPosition))
+            {
+                float aggressiveDistance = Clamp(_configuration.RemoteAggressivePresentationDistance.Value, 40f, 200f);
+                if ((player.Transform.position - localPosition).sqrMagnitude < aggressiveDistance * aggressiveDistance)
+                    return true;
+                if (hiddenBudget && !entity.HasBakedCullingVisibility && player.IsVisible)
+                    return true;
+            }
+
+            if (visibleDistant)
+            {
+                if (update < BudgetedUpdate.Arms) return true;
+                int visibleDivisor = Clamp(_configuration.RemoteVisiblePresentationDivisor.Value, 1, 4);
+                if (visibleDivisor <= 1) return true;
+                bool visibleRun = PositiveModulo(Time.frameCount + id, visibleDivisor) == 0;
+                if (!visibleRun) _skippedPresentation++;
+                return visibleRun;
+            }
+
+            // Most Streets entities have EFT baked-culling data. Avoid reading Fika's live
+            // visibility property on every arms/body/IK callback when the stronger baked map
+            // result already proves that the entity is hidden. Entities without baked data
+            // retain the immediate fail-open visibility check.
+            if (!_bakedHiddenIds.Contains(id) && player.IsVisible) return true;
+
+            if (_hardFrozenIds.Contains(id) && update >= BudgetedUpdate.Arms)
+            {
+                _skippedPresentation++;
+                return false;
+            }
+
             int divisor = Clamp(_configuration.RemoteUpdateBudgetDivisor.Value, 2, 8);
-            Dictionary<int, int> counters = update == BudgetedUpdate.Prop ? _propCallCounters
-                : update == BudgetedUpdate.Trigger ? _triggerCallCounters
-                : update == BudgetedUpdate.Arms ? _armsCallCounters
-                : update == BudgetedUpdate.Body || update == BudgetedUpdate.ObservedVisual ? _bodyCallCounters
-                : update == BudgetedUpdate.Ik || update == BudgetedUpdate.ObservedIk ? _ikCallCounters
-                : _complexLateCallCounters;
-            counters.TryGetValue(id, out int calls);
-            calls++;
-            bool run = calls >= divisor;
-            counters[id] = run ? 0 : calls;
+            // Schedule all presentation passes for one character on the same frame and stagger
+            // different characters by instance id. This removes six hot dictionaries and avoids
+            // concentrating every hidden bot's eighth update into one periodic spike.
+            bool run = PositiveModulo(Time.frameCount + id, divisor) == 0;
             if (!run)
             {
                 if (update == BudgetedUpdate.Prop) _skippedProps++;
@@ -275,6 +337,30 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 else _skippedPresentation++;
             }
             return run;
+        }
+
+        private static int PositiveModulo(int value, int divisor)
+        {
+            int result = value % divisor;
+            return result < 0 ? result + divisor : result;
+        }
+
+        private static bool DetectFikaHeadless()
+        {
+            try
+            {
+                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assemblies.Length; i++)
+                {
+                    Assembly assembly = assemblies[i];
+                    if (!string.Equals(assembly.GetName().Name, "Fika.Core", StringComparison.OrdinalIgnoreCase)) continue;
+                    Type backend = assembly.GetType("Fika.Core.Main.Utils.FikaBackendUtils", false);
+                    PropertyInfo property = backend?.GetProperty("IsHeadless", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    return property != null && (bool)property.GetValue(null, null);
+                }
+            }
+            catch { }
+            return false;
         }
 
         private void InstallPatches()
@@ -393,12 +479,8 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             {
                 _hiddenSince.Remove(_idRestore[i]);
                 _budgetedIds.Remove(_idRestore[i]);
-                _propCallCounters.Remove(_idRestore[i]);
-                _triggerCallCounters.Remove(_idRestore[i]);
-                _armsCallCounters.Remove(_idRestore[i]);
-                _bodyCallCounters.Remove(_idRestore[i]);
-                _ikCallCounters.Remove(_idRestore[i]);
-                _complexLateCallCounters.Remove(_idRestore[i]);
+                _distantVisibleIds.Remove(_idRestore[i]);
+                _hardFrozenIds.Remove(_idRestore[i]);
             }
         }
 
@@ -417,13 +499,10 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             _seenAnimators.Clear();
             _animatorRestore.Clear();
             _hiddenSince.Clear();
-            _propCallCounters.Clear();
-            _triggerCallCounters.Clear();
-            _armsCallCounters.Clear();
-            _bodyCallCounters.Clear();
-            _ikCallCounters.Clear();
-            _complexLateCallCounters.Clear();
             _budgetedIds.Clear();
+            _distantVisibleIds.Clear();
+            _hardFrozenIds.Clear();
+            _bakedHiddenIds.Clear();
             _seenIds.Clear();
             _idRestore.Clear();
         }

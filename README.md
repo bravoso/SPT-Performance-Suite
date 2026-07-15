@@ -1,33 +1,50 @@
-# Tarkov Performance Suite
+# Tarkov Performance Suite 1.0
 
-Profiler-first BepInEx diagnostics and reversible performance experiments for SPT/EFT. Version 0.8.0 targets the inspected EFT 0.16.9.40087 / SPT 4.0.13 / Fika 2.3.3 environment, but all game references are supplied at build time rather than committed as binaries.
+Tarkov Performance Suite reduces CPU work that the client does not need every rendered frame. It focuses on hidden or distant character presentation, repeated light and world-visual maintenance, combat effects that cannot be seen, known mod scan/log hot paths, and loading preparation. Damage, AI decisions, network snapshots, input, sound, and nearby or visible combat remain authoritative.
 
-The suite does not change AI decisions, bot population, damage, networking, inventory, or navigation. Version 0.8.0 adds a client-only combat-presentation budget for distant casing physics and active-bullet flyby-audio scans, while deeper capture-only timing now covers EFT's real world-tick stages, culling, effects, shells, and job scheduler. PiP scopes retain vanilla HDR and unlimited vanilla refresh; only normal-optic render resolution and MSAA are eligible for reduction. Num4 restores all reversible state for a true mid-raid A/B test. It does not force LODs or change global LOD bias.
+The 1.0 production package starts silently: the Extreme general-purpose preset and all optimization modules are enabled, while the diagnostics overlay, bot-counter HUD, method profiler, and loading/server reports are disabled. F12 exposes every setting. Changes to gameplay settings are saved immediately and applied in the running game; choosing a preset applies and saves its complete values. Loading and server settings are read at process startup and therefore require a restart.
 
-The optional aggressive profile can still trade texture, shadow, light, particle, and skin-weight quality for headroom, but it no longer changes LOD selection. `TextureMipLimit` should be selected before loading a raid because changing it forces Unity to re-upload affected textures. The declutter classifier is renderer-only: it never destroys objects or colliders, and its scan is amortized after one discovery pass.
+## Presets
 
-Use F12 and select `OldCpuAggressive` under **Quick Setup** for a 4-core/8-thread client. Num4 toggles every optimization together for an A/B test, Num7 toggles the compact overlay, Num8 toggles continuous back-to-back profiling, and Num9 exports an immediate report. Every CSV sample records whether the A/B master was on or off.
+- `Balanced`: lighter visual and update budgets.
+- `Performance`: the full optimization stack with moderate distances and rates.
+- `Extreme`: strongest production settings for every map; selected by default.
+- `Custom`: selected automatically when an individual optimization value is edited.
+
+Extreme keeps the texture mip limit at zero and leaves LOD selection untouched. It deliberately reduces shadow distance/resolution, transient pixel lights, particle raycasts, distant presentation frequency, and repeated ambient/world command rebuilding.
+
+## Measured result
+
+Raid-to-raid conditions are not identical, so results are not a guarantee. In the conservative entity-matched Customs comparison, the latest build improved average FPS by 14.9%, 5% low by 30.8%, and 1% low by 10.5%; median main-thread time fell 10.9% and its 95th percentile fell 23.2%. The raw earliest-to-latest Customs captures measured +26.0% average FPS, +35.0% 5% low, and +27.8% 1% low. One same-raid Streets A/B observation rose from roughly 85 FPS disabled to 100-105 enabled. Hardware, bot count, weather, combat, other mods, and route strongly affect the outcome.
+
+## Install
+
+1. Close EFT and SPT.
+2. Extract the release ZIP into the SPT game folder, keeping its `BepInEx` and `SPT` folders.
+3. If the SPT server is on another computer, install `SPT\user\mods\TarkovPerformanceLoadingServer` on that actual server instead.
+4. With Fika, install the `BepInEx` portion on each playable client and headless client. Install the server portion once on the real SPT server.
+
+The SPT/BepInEx installation is required. Fika, Dynamic Maps, SAIN, ORBIT, and BigBrain are optional. The suite discovers them at runtime and skips their integration when absent; it does not link against their assemblies. The client works in ordinary non-Fika SPT, and the server accelerator is optional.
+
+The package includes the unmodified MIT-licensed PiP-Disabler 1.5.0 by Fiodorwellfme. If it is removed, the suite still loads and uses vanilla PiP instead of the no-PiP replacement.
+
+## Controls
+
+- `Num4`: all gameplay optimizations on/off for an A/B comparison.
+- `Num3`: no-PiP main-camera scope replacement/full-resolution vanilla PiP.
+- `Num7`: diagnostics overlay.
+- `Num8`: repeating 120-second captures.
+- `Num9`: immediate diagnostic report.
+- `F12`: Configuration Manager settings, including the optional bot counter and profiler.
+
+Profiling output is written only after profiling is explicitly enabled. See [SPT Forge description](docs/SPT_FORGE_DESCRIPTION.md), [third-party notices](THIRD_PARTY_NOTICES.md), and [benchmark protocol](docs/BENCHMARK_PROTOCOL.md).
 
 ## Build
-
-Use a reference installation only for assemblies:
 
 ```powershell
 $env:SPT_REFERENCE_ROOT = 'D:\path\to\reference-SPT'
 .\scripts\build.ps1
+.\scripts\package-friend.ps1 -ReferenceRoot $env:SPT_REFERENCE_ROOT
 ```
 
-Deployment to a test installation:
-
-```powershell
-$env:SPT_TEST_ROOT = 'D:\path\to\disposable-SPT'
-.\scripts\deploy-test.ps1
-```
-
-See `docs/IN_GAME_TESTING.md` before enabling the experiment.
-
-Create a sendable friend package with:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-friend.ps1 -ReferenceRoot 'D:\SPT'
-```
+Game and SPT assemblies are build-time references and are not committed or redistributed.

@@ -15,6 +15,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private readonly CircuitBreaker _breaker = new CircuitBreaker(3);
         private FramePacingSnapshot _original;
         private bool _haveOriginal;
+        private bool _raidActive;
         private float _nextApply;
 
         internal FramePacingFeature(ManualLogSource logger, PluginConfiguration configuration, RecentExceptionLog exceptions)
@@ -28,22 +29,29 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         public bool IsAvailable => !_breaker.IsOpen;
         public bool IsEnabled { get; private set; }
         internal string StatusText => IsEnabled
-            ? $"enabled | uploads {QualitySettings.asyncUploadTimeSlice} ms/{QualitySettings.asyncUploadBufferSize} MB | persistent {QualitySettings.asyncUploadPersistentBuffer} | loading {Application.backgroundLoadingPriority} | collision reuse {Physics.reuseCollisionCallbacks}"
+            ? (_raidActive
+                ? $"enabled | uploads {QualitySettings.asyncUploadTimeSlice} ms/{QualitySettings.asyncUploadBufferSize} MB | persistent {QualitySettings.asyncUploadPersistentBuffer} | loading {Application.backgroundLoadingPriority} | collision reuse {Physics.reuseCollisionCallbacks}"
+                : "armed for raid (loading DLL owns menu/loading budgets)")
             : _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
 
         public void Initialize()
         {
             _breaker.Reset();
-            SetEnabled(_configuration.FramePacingEnabled.Value);
+            IsEnabled = _configuration.FramePacingEnabled.Value;
         }
 
         public void OnRaidStarted()
         {
+            _raidActive = true;
             _nextApply = 0;
             if (IsEnabled) Apply();
         }
 
-        public void OnRaidEnded() { }
+        public void OnRaidEnded()
+        {
+            _raidActive = false;
+            Restore();
+        }
 
         public void SetEnabled(bool enabled)
         {
@@ -51,19 +59,20 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             if (IsEnabled == enabled) return;
             IsEnabled = enabled;
             _configuration.FramePacingEnabled.Value = enabled;
-            if (enabled) Apply();
+            if (enabled && _raidActive) Apply();
             else Restore();
         }
 
         public void Shutdown()
         {
             IsEnabled = false;
+            _raidActive = false;
             Restore();
         }
 
         internal void Tick(float now)
         {
-            if (!IsEnabled || now < _nextApply) return;
+            if (!IsEnabled || !_raidActive || now < _nextApply) return;
             _nextApply = now + 2f;
             Apply();
         }

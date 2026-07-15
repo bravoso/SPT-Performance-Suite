@@ -1,5 +1,7 @@
 using System;
 using System.Reflection;
+using BepInEx.Bootstrap;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using EFT.CameraControl;
 using HarmonyLib;
@@ -12,10 +14,11 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 {
     internal readonly struct PipScopeCounters
     {
-        internal PipScopeCounters(bool active, bool specialOpticBypass, int sourceResolution, int optimizedResolution,
+        internal PipScopeCounters(bool active, bool renderingDisabled, bool specialOpticBypass, int sourceResolution, int optimizedResolution,
             long renderedFrames, long reusedFrames, double averageRenderMs)
         {
             Active = active;
+            RenderingDisabled = renderingDisabled;
             SpecialOpticBypass = specialOpticBypass;
             SourceResolution = sourceResolution;
             OptimizedResolution = optimizedResolution;
@@ -25,6 +28,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         }
 
         internal bool Active { get; }
+        internal bool RenderingDisabled { get; }
         internal bool SpecialOpticBypass { get; }
         internal int SourceResolution { get; }
         internal int OptimizedResolution { get; }
@@ -54,6 +58,9 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private GClass3687 _manager;
         private GClass3687 _resolutionManager;
         private Camera _camera;
+        private Camera _disabledCamera;
+        private bool _disabledCameraWasEnabled;
+        private bool _renderingDisabled;
         private bool _originalMsaa;
         private bool _originalOcclusion;
         private int _sourceResolution;
@@ -61,6 +68,10 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         private long _renderedFrames;
         private long _reusedFrames;
         private double _averageRenderMs;
+        private ConfigEntry<bool> _replacementEnabledEntry;
+        private float _nextReplacementLookup;
+        private bool _replacementDesired;
+        private bool _replacementActive;
 
         internal PipScopeOptimizationFeature(ManualLogSource logger, PluginConfiguration configuration, RecentExceptionLog exceptions)
         {
@@ -72,12 +83,14 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
         public string Name => "PiP Scope Camera Budget";
         public bool IsAvailable => _patchInstalled && !_breaker.IsOpen;
         public bool IsEnabled { get; private set; }
-        internal PipScopeCounters Counters => new PipScopeCounters(_sessionActive, _specialBypass, _sourceResolution,
+        internal PipScopeCounters Counters => new PipScopeCounters(_sessionActive, _renderingDisabled && !_specialBypass, _specialBypass, _sourceResolution,
             _optimizedResolution, _renderedFrames, _reusedFrames, _averageRenderMs);
         internal string StatusText
         {
             get
             {
+                if (_replacementActive) return "active | main-camera zoom; secondary PiP camera released | Num3 restores full-resolution PiP";
+                if (_replacementDesired && _replacementEnabledEntry == null) return "vanilla full-resolution PiP | replacement plugin missing";
                 if (!IsEnabled) return _breaker.IsOpen ? "disabled (circuit breaker)" : "disabled";
                 if (!_patchInstalled) return "unavailable (optic update hook missing)";
                 if (_specialBypass) return "enabled | thermal/NVG unchanged";
@@ -105,6 +118,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
                 _exceptions.Add(Name + " patch install", ex);
                 _logger.LogWarning(Name + " unavailable; vanilla PiP is unchanged: " + ex.Message);
             }
+            _renderingDisabled = false;
             SetEnabled(_configuration.PipScopeOptimizationEnabled.Value);
         }
 
@@ -114,6 +128,30 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             _renderedFrames = 0;
             _reusedFrames = 0;
             _averageRenderMs = 0;
+            _renderingDisabled = false;
+        }
+
+        internal void Tick(bool masterEnabled)
+        {
+            _replacementDesired = masterEnabled && _configuration.PipReplacementEnabled.Value;
+            if (_replacementEnabledEntry == null && Time.realtimeSinceStartup >= _nextReplacementLookup)
+            {
+                _nextReplacementLookup = Time.realtimeSinceStartup + 2f;
+                ResolveReplacementPlugin();
+            }
+
+            if (_replacementEnabledEntry != null && _replacementEnabledEntry.Value != _replacementDesired)
+            {
+                try { _replacementEnabledEntry.Value = _replacementDesired; }
+                catch (Exception ex)
+                {
+                    _exceptions.Add(Name + " PiP replacement sync", ex);
+                    _replacementEnabledEntry = null;
+                    _nextReplacementLookup = Time.realtimeSinceStartup + 5f;
+                }
+            }
+            _replacementActive = _replacementEnabledEntry != null && _replacementEnabledEntry.Value;
+            if (_replacementActive && _sessionActive) RestoreAll();
         }
 
         public void OnRaidEnded()
@@ -144,6 +182,24 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             if (ReferenceEquals(_instance, this)) _instance = null;
         }
 
+        private void ResolveReplacementPlugin()
+        {
+            try
+            {
+                if (!Chainloader.PluginInfos.TryGetValue("com.fiodor.pipdisabler", out BepInEx.PluginInfo info)
+                    || info?.Instance == null) return;
+                Type settings = info.Instance.GetType().Assembly.GetType("PiPDisabler.Settings", false);
+                FieldInfo field = settings?.GetField("ModEnabled", BindingFlags.Public | BindingFlags.Static);
+                _replacementEnabledEntry = field?.GetValue(null) as ConfigEntry<bool>;
+                if (_replacementEnabledEntry != null)
+                    _logger.LogInfo("PiP-Disabler 1.5 integration active. Num3 switches between main-camera zoom and full-resolution vanilla PiP.");
+            }
+            catch (Exception ex)
+            {
+                _exceptions.Add(Name + " PiP replacement discovery", ex);
+            }
+        }
+
         private static void OpticLateUpdatePostfix()
         {
             _instance?.AfterOpticUpdate();
@@ -151,7 +207,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         private void AfterOpticUpdate()
         {
-            if (!IsEnabled || !_raidActive || !_patchInstalled) return;
+            if (!IsEnabled || !_raidActive || !_patchInstalled || _replacementActive) return;
             try
             {
                 if (!CameraClass.Exist || CameraClass.Instance == null)
@@ -179,6 +235,8 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
                 if (!_sessionActive || camera != _camera || manager != _manager)
                     BeginSession(manager, camera);
+
+                RestoreDisabledCamera();
 
                 EnsureOptimizedResolution();
                 if (_configuration.PipScopeDisableMsaa.Value) camera.allowMSAA = false;
@@ -248,6 +306,7 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
 
         private void ReleaseCameraOwnership(bool keepSpecialBypass)
         {
+            RestoreDisabledCamera();
             if (_sessionActive && _camera != null)
             {
                 try
@@ -261,6 +320,34 @@ namespace TarkovPerformanceSuite.RuntimeFeatures
             _camera = null;
             _manager = null;
             if (!keepSpecialBypass) _specialBypass = false;
+        }
+
+        private void DisableCamera(Camera camera)
+        {
+            if (camera == null) return;
+            if (_disabledCamera != camera)
+            {
+                RestoreDisabledCamera();
+                // Do not claim a camera the game already disabled because it is not currently
+                // rendering an aimed optic. The next active frame will be caught normally.
+                if (!camera.enabled) return;
+                _disabledCamera = camera;
+                _disabledCameraWasEnabled = true;
+            }
+            camera.enabled = false;
+        }
+
+        private void RestoreDisabledCamera()
+        {
+            Camera camera = _disabledCamera;
+            bool wasEnabled = _disabledCameraWasEnabled;
+            _disabledCamera = null;
+            _disabledCameraWasEnabled = false;
+            if (camera != null)
+            {
+                try { camera.enabled = wasEnabled; }
+                catch { }
+            }
         }
 
         private void RestoreAll()
