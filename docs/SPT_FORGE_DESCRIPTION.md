@@ -68,4 +68,4 @@ For non-Fika SPT, install the `BepInEx` files on the game and optionally the ser
 
 ## Credits and license
 
-Tarkov Performance Suite is MIT licensed. The release packages the unmodified [PiP-Disabler 1.5.0](https://github.com/Fiodorwellfme/PiP-Disabler) by Fiodorwellfme under its MIT license. No source code from Dynamic Maps, Fika, SAIN, ORBIT, BigBrain, or Tyrian De-Clutterer is included. Their names are used only for optional runtime compatibility.
+Tarkov Performance Suite is MIT licensed. The release packages the unmodified [PiP-Disabler 1.5.0](https://github.com/Fiodorwellfme/PiP-Disabler) by Fiodorwellfme under its MIT license. No source code from Dynamic Maps, Fika, SAIN, ORBIT, BigBrain, or [Tyrian-DeClutterer](https://github.com/Xenoxia8953/Tyrian-DeClutterer) is included. Tyrian-DeClutterer by Xenoxia8953 was researched as prior art for the high-level cosmetic-decluttering idea and object categories; Tarkov Performance Suite's reversible renderer-only implementation was written separately. The other project names are used for optional runtime compatibility.
