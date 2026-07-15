@@ -81,6 +81,19 @@ def summarize(path: Path) -> pd.DataFrame:
         f"{int((rolling_fps < 40).sum())}/{int((rolling_fps < 30).sum())}"
     )
 
+    stable = frame[frame["frame_time_ms"].between(1, 100)].copy()
+    if "main_thread_ms" in stable and stable["main_thread_ms"].notna().any():
+        cpu_ms = stable["main_thread_ms"].dropna().median()
+        gpu_ms = stable["gpu_frame_ms"].dropna().median() if "gpu_frame_ms" in stable else np.nan
+        print(f"sustained median CPU/GPU budget={fmt(cpu_ms)}/{fmt(gpu_ms)} ms")
+        for target_fps in (60, 80, 100):
+            target_ms = 1000.0 / target_fps
+            saving = max(0.0, cpu_ms - target_ms)
+            percent = saving / cpu_ms * 100.0 if cpu_ms > 0 else np.nan
+            print(f"CPU saving needed for {target_fps} FPS: {fmt(saving)} ms ({fmt(percent)}%)")
+        if gpu_ms > 0:
+            print(f"same-workload GPU ceiling if CPU were free: ~{1000.0 / gpu_ms:.1f} FPS")
+
     for limit in (50, 40, 30):
         below = frame["fps"] < limit
         groups = below.ne(below.shift()).cumsum()
@@ -135,6 +148,33 @@ def summarize(path: Path) -> pd.DataFrame:
     ]
     print("Largest frame spikes:")
     print(spikes[spike_columns].to_string(index=False, float_format=lambda x: f"{x:.3f}"))
+
+    if "optimizations_enabled" in frame:
+        state = frame["optimizations_enabled"].astype(str).str.lower().map(
+            {"true": True, "false": False, "1": True, "0": False}
+        )
+        valid = frame[state.notna()].copy()
+        valid["ab_state"] = state[state.notna()].astype(bool).to_numpy()
+        if valid["ab_state"].nunique() > 1:
+            # Drop five seconds after every switch so texture restoration, camera recreation,
+            # and player movement immediately around the key press do not decide the result.
+            valid["ab_segment"] = valid["ab_state"].ne(valid["ab_state"].shift()).cumsum()
+            segment_start = valid.groupby("ab_segment")["timestamp"].transform("min")
+            settled = valid[(valid["timestamp"] - segment_start) >= 5.0]
+            rows = []
+            for enabled, group in settled.groupby("ab_state"):
+                rows.append({
+                    "state": "ON" if enabled else "OFF",
+                    "samples": len(group),
+                    "seconds": group["frame_time_ms"].sum() / 1000.0,
+                    "effective_fps": 1000.0 / group["frame_time_ms"].mean(),
+                    "fps_p5": group["fps"].quantile(0.05),
+                    "frame_p95_ms": group["frame_time_ms"].quantile(0.95),
+                    "main_avg_ms": group["main_thread_ms"].mean() if "main_thread_ms" in group else np.nan,
+                    "gpu_avg_ms": group["gpu_frame_ms"].mean() if "gpu_frame_ms" in group else np.nan,
+                })
+            print("A/B comparison (first 5 seconds after each switch excluded):")
+            print(pd.DataFrame(rows).to_string(index=False, float_format=lambda x: f"{x:.3f}"))
     frame["capture"] = path.stem
     return frame
 

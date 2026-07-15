@@ -12,12 +12,12 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
 {
     internal static class DiagnosticReport
     {
-        internal static string Write(string directory, RuntimeInformation runtime, ProfilerMetrics metrics, EntityCounts counts, RecentExceptionLog exceptions, string featureState, string benchmarkConfiguration, string methodPatchReport, string methodTimingSnapshot, double suiteMs)
+        internal static string Write(string directory, RuntimeInformation runtime, ProfilerMetrics metrics, EntityCounts counts, RecentExceptionLog exceptions, string featureState, string combatStatus, string benchmarkConfiguration, string methodPatchReport, string methodTimingSnapshot, double suiteMs)
         {
             Directory.CreateDirectory(directory);
             string path = Path.Combine(directory, "diagnostics_" + DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss") + ".txt");
             var builder = new StringBuilder(8192);
-            builder.AppendLine("Tarkov Performance Suite diagnostics 0.2.0");
+            builder.AppendLine("Tarkov Performance Suite diagnostics " + Plugin.PluginVersion);
             builder.AppendLine("Generated: " + DateTime.Now.ToString("O"));
             builder.AppendLine();
             builder.AppendLine("VERSIONS");
@@ -44,7 +44,8 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             builder.AppendLine();
             builder.AppendLine("ACTIVE FEATURE STATES");
             builder.AppendLine(featureState);
-            builder.AppendLine($"entities={counts.Players}; ai={counts.Ai}; visibleAi={counts.VisibleAi}; corpses(partial)={counts.Corpses}; animators={counts.Animators}; skinnedRenderers={counts.SkinnedRenderers}; shadowRenderers={counts.ShadowRenderers}");
+            builder.AppendLine("remoteCombat=" + combatStatus);
+            builder.AppendLine($"entities={counts.Players}; ai={counts.Ai}; visibleAi={counts.VisibleAi}; bakedCullingEntities={counts.BakedCullingEntities}; bakedHiddenEntities={counts.BakedHiddenEntities}; corpses(partial)={counts.Corpses}; animators={counts.Animators}; skinnedRenderers={counts.SkinnedRenderers}; shadowRenderers={counts.ShadowRenderers}");
             builder.AppendLine("suiteAverageMs=" + suiteMs.ToString("F4"));
             builder.AppendLine("benchmarkConfiguration=" + benchmarkConfiguration);
             builder.AppendLine();

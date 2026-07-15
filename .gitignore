@@ -10,4 +10,4 @@ TestResults/
 local.settings.json
 Directory.Build.local.props
 artifacts/
-
+benchmarks/friend-*/

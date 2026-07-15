@@ -1,6 +1,6 @@
 # Roadmap
 
-Version 0.2.0 implements only adaptive remote-AI shadow distance and a disabled-by-default offscreen skinned-mesh isolation experiment. It does not throttle observed-player update methods, packets, AI authority, combat, physics, or animation controllers.
+Version 0.8.0 implements the central relevance cache, an aggressive hidden-remote presentation budget, and bounded client-only combat cosmetics. It never throttles packets, root snapshot application, visibility, AI authority, combat, ballistics, damage, inventory, or navigation. Hidden prop, trigger-search, arms, body, IK, and outer late-presentation work is amortized and full-rate presentation resumes as soon as the existing culling signal reports visibility. PiP remains a real second camera at vanilla refresh and HDR.
 
 ## Stage A - Isolation experiments
 

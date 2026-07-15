@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Globalization;
 using System.IO;
 using System.Threading;
@@ -19,6 +20,7 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         private string _features;
         private string _directory;
         private bool _exportCsv;
+        private bool _exportJson;
         private double _sumFps;
         private double _minimumFps;
         private volatile string _completedMessage;
@@ -30,12 +32,12 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         internal double AverageFps => _count > 0 ? _sumFps / _count : 0;
         internal double MinimumFps => _count > 0 ? _minimumFps : 0;
 
-        internal void Start(double now, double durationSeconds, string map, string features, string directory, bool exportCsv)
+        internal void Start(double now, double durationSeconds, string map, string features, string directory, bool exportCsv, bool exportJson)
         {
             if (IsCapturing) return;
             DurationSeconds = durationSeconds;
             int capacity = Math.Max(1, (int)Math.Ceiling(durationSeconds * 240.0));
-            _buffer = new BenchmarkSample[capacity];
+            _buffer = ArrayPool<BenchmarkSample>.Shared.Rent(capacity);
             _count = 0;
             _sumFps = 0;
             _minimumFps = double.MaxValue;
@@ -45,12 +47,17 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             _features = features ?? string.Empty;
             _directory = directory;
             _exportCsv = exportCsv;
+            _exportJson = exportJson;
             ElapsedSeconds = 0;
             IsCapturing = true;
             _logger.LogInfo($"Benchmark capture started: {durationSeconds:F0} seconds, map {_map}, {_features}");
         }
 
-        internal bool Record(double now, double frameTimeMs, ProfilerMetrics metrics, EntityCounts counts, ShadowFeatureCounters shadows, SkinningFeatureCounters skinning, int? fikaServerFps)
+        internal bool Record(double now, double frameTimeMs, ProfilerMetrics metrics, EntityCounts counts, ShadowFeatureCounters shadows,
+            SkinningFeatureCounters skinning, RemoteRenderLodCounters renderLod, DeclutterCounters declutter,
+            AreaLightCacheCounters areaLights, RemoteUpdateBudgetCounters remoteBudget, RemoteCombatCounters remoteCombat,
+            PipScopeCounters pipScope, bool optimizationsEnabled,
+            long compatibilityFastWorldLookups, int? fikaServerFps)
         {
             if (!IsCapturing) return false;
             ElapsedSeconds = now - _startedRealtime;
@@ -71,12 +78,17 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                     PlayerLoopMs = metrics.TimeMs("PlayerLoop"),
                     WaitForTargetFpsMs = metrics.TimeMs("WaitForTargetFPS"),
                     GcCollectMs = metrics.TimeMs("GC.Collect"),
-                    GcValue = metrics.Value("GC Allocated In Frame") ?? metrics.Value("GC Reserved Memory"),
+                    GcValue = metrics.Value("GC Allocated In Frame"),
+                    GcUsedMemory = metrics.Value("GC Used Memory"),
+                    GcReservedMemory = metrics.Value("GC Reserved Memory"),
+                    AppResidentMemory = metrics.Value("App Resident Memory"),
                     DrawCalls = metrics.Value("Draw Calls Count"),
                     SetPassCalls = metrics.Value("SetPass Calls Count"),
                     PlayerCount = counts.Players,
                     AiCount = counts.Ai,
                     VisibleAiCount = counts.VisibleAi,
+                    BakedCullingEntityCount = counts.BakedCullingEntities,
+                    BakedHiddenEntityCount = counts.BakedHiddenEntities,
                     CorpseCount = counts.Corpses,
                     AnimatorCount = counts.Animators,
                     SkinnedRendererCount = counts.SkinnedRenderers,
@@ -84,6 +96,36 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
                     ShadowEffectiveDistance = shadows.EffectiveDistance,
                     ShadowDisabledRendererCount = shadows.DisabledRenderers,
                     SkinningModifiedRendererCount = skinning.ModifiedRenderers,
+                    RemoteLodMidAiCount = renderLod.MidTierAi,
+                    RemoteLodFarAiCount = renderLod.FarTierAi,
+                    RemoteLodForcedGroupCount = renderLod.ForcedLodGroups,
+                    RemoteLodModifiedRendererCount = renderLod.ModifiedRenderers,
+                    DeclutterHiddenRendererCount = declutter.Hidden,
+                    AreaLightReusedCommandBuffers = areaLights.ReusedCommandBuffers,
+                    AreaLightRebuiltCommandBuffers = areaLights.RebuiltCommandBuffers,
+                    RemoteBudgetedCharacterCount = remoteBudget.BudgetedCharacters,
+                    RemoteCulledAnimatorCount = remoteBudget.CulledAnimators,
+                    RemoteSkippedPropUpdates = remoteBudget.SkippedPropUpdates,
+                    RemoteSkippedTriggerSearches = remoteBudget.SkippedTriggerSearches,
+                    RemoteSkippedPresentationUpdates = remoteBudget.SkippedPresentationUpdates,
+                    RemoteCombatShots = remoteCombat.RemoteShots,
+                    RemoteSoundOnlyShots = remoteCombat.SoundOnlyShots,
+                    RemoteCombatSafetyBypasses = remoteCombat.SafetyBypasses,
+                    RemoteCulledMuzzleEffects = remoteCombat.CulledMuzzles,
+                    RemoteCulledImpactEffects = remoteCombat.CulledImpacts,
+                    RemoteCulledCasings = remoteCombat.CulledShells,
+                    RemoteCulledLights = remoteCombat.CulledLights,
+                    RemoteSoundOnlyAuthority = remoteCombat.AuthoritativeClient,
+                    RemoteCombatDecisionMs = remoteCombat.AverageDecisionMs,
+                    OptimizationsEnabled = optimizationsEnabled,
+                    PipScopeActive = pipScope.Active,
+                    PipRenderingDisabled = pipScope.RenderingDisabled,
+                    PipScopeSourceResolution = pipScope.SourceResolution,
+                    PipScopeOptimizedResolution = pipScope.OptimizedResolution,
+                    PipScopeRenderedFrames = pipScope.RenderedFrames,
+                    PipScopeReusedFrames = pipScope.ReusedFrames,
+                    PipScopeAverageRenderMs = pipScope.AverageRenderMs,
+                    CompatibilityFastWorldLookups = compatibilityFastWorldLookups,
                     FikaServerFps = fikaServerFps
                 };
                 _sumFps += fps;
@@ -101,16 +143,22 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
         {
             if (!IsCapturing) return;
             IsCapturing = false;
-            BenchmarkSample[] samples = new BenchmarkSample[_count];
-            Array.Copy(_buffer, samples, _count);
+            BenchmarkSample[] samples = _buffer;
+            int sampleCount = _count;
             _buffer = Array.Empty<BenchmarkSample>();
-            if (cancelled) { _logger.LogInfo("Benchmark capture cancelled cleanly at raid end."); return; }
+            if (cancelled)
+            {
+                if (samples.Length > 0) ArrayPool<BenchmarkSample>.Shared.Return(samples, clearArray: false);
+                _logger.LogInfo("Benchmark capture cancelled cleanly at raid end.");
+                return;
+            }
 
-            var export = new BenchmarkExport { StartedUtc = _startedUtc, MapName = _map, EnabledFeatures = _features, Samples = samples };
+            var export = new BenchmarkExport { StartedUtc = _startedUtc, MapName = _map, EnabledFeatures = _features, Samples = samples, SampleCount = sampleCount };
             string directory = _directory;
             bool csv = _exportCsv;
+            bool json = _exportJson;
             string stem = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture) + "_" + Sanitize(_map) + "_" + Sanitize(_features);
-            ThreadPool.QueueUserWorkItem(_ => ExportWorker(export, directory, stem, csv));
+            ThreadPool.QueueUserWorkItem(_ => ExportWorker(export, directory, stem, csv, json));
         }
 
         internal void DrainCompletionLog()
@@ -121,20 +169,33 @@ namespace TarkovPerformanceSuite.RuntimeDiagnostics
             _logger.LogInfo(message);
         }
 
-        private void ExportWorker(BenchmarkExport export, string directory, string stem, bool csv)
+        private void ExportWorker(BenchmarkExport export, string directory, string stem, bool csv, bool json)
         {
             try
             {
                 Directory.CreateDirectory(directory);
-                string jsonPath = Path.Combine(directory, stem + ".json");
-                using (var writer = new StreamWriter(jsonPath, false, new System.Text.UTF8Encoding(false))) BenchmarkSerializer.WriteJson(writer, export);
+                string completedPath = null;
+                if (json)
+                {
+                    string jsonPath = Path.Combine(directory, stem + ".json");
+                    using (var writer = new StreamWriter(jsonPath, false, new System.Text.UTF8Encoding(false), 65536)) BenchmarkSerializer.WriteJson(writer, export);
+                    completedPath = jsonPath;
+                }
                 if (csv)
                 {
-                    using (var writer = new StreamWriter(Path.Combine(directory, stem + ".csv"), false, new System.Text.UTF8Encoding(false))) BenchmarkSerializer.WriteCsv(writer, export);
+                    string csvPath = Path.Combine(directory, stem + ".csv");
+                    using (var writer = new StreamWriter(csvPath, false, new System.Text.UTF8Encoding(false), 65536)) BenchmarkSerializer.WriteCsv(writer, export);
+                    completedPath = csvPath;
                 }
-                _completedMessage = "Benchmark export completed: " + jsonPath;
+                _completedMessage = completedPath == null ? "Benchmark capture completed; file export is disabled." : "Benchmark export completed: " + completedPath;
             }
             catch (Exception ex) { _completedMessage = "Benchmark export failed: " + ex; }
+            finally
+            {
+                BenchmarkSample[] samples = export.Samples;
+                export.Samples = Array.Empty<BenchmarkSample>();
+                if (samples != null && samples.Length > 0) ArrayPool<BenchmarkSample>.Shared.Return(samples, clearArray: false);
+            }
         }
 
         private static string Sanitize(string value)

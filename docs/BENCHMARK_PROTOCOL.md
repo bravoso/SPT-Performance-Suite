@@ -2,11 +2,13 @@
 
 Do not claim a performance gain from a single run.
 
-## Baseline A
+## Same-raid A/B (preferred)
 
-- Plugin installed.
-- All optimization experiments disabled.
-- Overlay may be visible.
+- Install the friend profile and use Woods on the i7-2600K.
+- Start continuous capture with Num8.
+- Alternate Num4 `OPTIMIZATIONS ON` and `OFF` every 30-60 seconds for at least two cycles.
+- Ignore the first five seconds after each switch; the analyzer does this automatically.
+- Keep route, viewing direction, combat exposure, scope use, and AI population as comparable as practical.
 
 ## Test B
 
@@ -22,7 +24,7 @@ Do not claim a performance gain from a single run.
 
 ## Procedure
 
-1. Use a disposable SPT profile or controlled preset.
+1. Use a disposable SPT profile or controlled preset. Record whether Num3 selected main-camera zoom or full-resolution vanilla PiP.
 2. Use the same map and approximately the same location and viewing direction.
 3. Allow at least 60 seconds of warm-up.
 4. Press Num8 for the configured 120-second capture.
@@ -31,7 +33,7 @@ Do not claim a performance gain from a single run.
 7. Repeat on Ryzen 7 5800X3D + RTX 4070 and i7-2600K + GTX 1070.
 8. Review logs for circuit breakers, classification uncertainty, and restoration errors.
 9. Visually verify nearby/local/remote-human shadows, remote-AI bodies and equipment, death/corpses, scopes, reconnect/transit, and raid exit.
-10. Test Baseline A, Test B, and Test C independently before attempting B+C. Method timing should remain capture-only.
+10. Use the same-raid Num4 comparison for the complete stack, then isolate individual features through F12 only if the complete stack shows a regression or no measurable gain. Method timing should remain capture-only.
 
 A feature is initially promising only with at least 1.0 ms lower median or p95 CPU frame time, or at least 5% repeatable FPS improvement, with no gameplay, synchronization, or visual regression. A smaller repeatable gain may remain if risk and overhead are negligible.
 

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>TarkovPerformance.Loading</AssemblyName>
+    <RootNamespace>TarkovPerformanceSuite.Loading</RootNamespace>
+    <SptReferenceRoot Condition="'$(SptReferenceRoot)' == ''">$(SPT_REFERENCE_ROOT)</SptReferenceRoot>
+    <ManagedDir>$(SptReferenceRoot)\EscapeFromTarkov_Data\Managed</ManagedDir>
+    <BepInExCoreDir>$(SptReferenceRoot)\BepInEx\core</BepInExCoreDir>
+    <SptPluginDir>$(SptReferenceRoot)\BepInEx\plugins\spt</SptPluginDir>
+  </PropertyGroup>
+
+  <Target Name="ValidateSptReferenceRoot" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(SptReferenceRoot)' == ''" Text="Set SPT_REFERENCE_ROOT or pass /p:SptReferenceRoot=..." />
+    <Error Condition="!Exists('$(ManagedDir)\Assembly-CSharp.dll')" Text="Assembly-CSharp.dll was not found under $(ManagedDir)." />
+    <Error Condition="!Exists('$(SptPluginDir)\spt-common.dll')" Text="spt-common.dll was not found under $(SptPluginDir)." />
+  </Target>
+
+  <ItemGroup>
+    <Reference Include="BepInEx" HintPath="$(BepInExCoreDir)\BepInEx.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(BepInExCoreDir)\0Harmony.dll" Private="false" />
+    <Reference Include="Assembly-CSharp" HintPath="$(ManagedDir)\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="Comfort" HintPath="$(ManagedDir)\Comfort.dll" Private="false" />
+    <Reference Include="Comfort.Unity" HintPath="$(ManagedDir)\Comfort.Unity.dll" Private="false" />
+    <Reference Include="CommonExtensions" HintPath="$(ManagedDir)\CommonExtensions.dll" Private="false" />
+    <Reference Include="DOTween" HintPath="$(ManagedDir)\DOTween.dll" Private="false" />
+    <Reference Include="spt-common" HintPath="$(SptPluginDir)\spt-common.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath="$(ManagedDir)\UnityEngine.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.AssetBundleModule" HintPath="$(ManagedDir)\UnityEngine.AssetBundleModule.dll" Private="false" />
+  </ItemGroup>
+</Project>

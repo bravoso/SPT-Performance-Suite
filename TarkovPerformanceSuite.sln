@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TarkovPerformance.Core", "s
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TarkovPerformance.Plugin", "src\TarkovPerformance.Plugin\TarkovPerformance.Plugin.csproj", "{D3505314-E929-40BA-AC65-3F0E9754754E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TarkovPerformance.Loading", "src\TarkovPerformance.Loading\TarkovPerformance.Loading.csproj", "{BB622EC7-5977-4E80-B721-E3EA873C55F8}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TarkovPerformance.Tests", "tests\TarkovPerformance.Tests\TarkovPerformance.Tests.csproj", "{498A980D-86E2-4F77-A2DD-C9342F75B782}"
 EndProject
 Global
@@ -22,10 +24,13 @@ Global
 		{D3505314-E929-40BA-AC65-3F0E9754754E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D3505314-E929-40BA-AC65-3F0E9754754E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D3505314-E929-40BA-AC65-3F0E9754754E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BB622EC7-5977-4E80-B721-E3EA873C55F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BB622EC7-5977-4E80-B721-E3EA873C55F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BB622EC7-5977-4E80-B721-E3EA873C55F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BB622EC7-5977-4E80-B721-E3EA873C55F8}.Release|Any CPU.Build.0 = Release|Any CPU
 		{498A980D-86E2-4F77-A2DD-C9342F75B782}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{498A980D-86E2-4F77-A2DD-C9342F75B782}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{498A980D-86E2-4F77-A2DD-C9342F75B782}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{498A980D-86E2-4F77-A2DD-C9342F75B782}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
-

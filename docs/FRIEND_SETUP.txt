@@ -1,0 +1,28 @@
+TARKOV PERFORMANCE SUITE 1.0 - PRODUCTION INSTALL
+
+1. Close SPT and Escape from Tarkov.
+2. Extract this package into the SPT game folder. Keep the BepInEx and SPT folder structure.
+3. If the SPT server is on another computer, move SPT\user\mods\TarkovPerformanceLoadingServer to that real server. Installing it beside a remote client does nothing.
+4. With Fika, install the BepInEx files on every playable client and headless client. Install the SPT server folder once on the real server.
+5. Start normally. Extreme optimizations are enabled. The diagnostics panel, bot counter, method profiler, and report writers are disabled by default.
+6. Press F12 and search for Tarkov Performance Suite to choose Balanced, Performance, Extreme, or Custom and to enable diagnostics.
+
+HOTKEYS
+Num4 = toggle all gameplay optimizations for A/B testing
+Num3 = no-PiP scope replacement / full-resolution vanilla PiP
+Num7 = diagnostics panel
+Num8 = start/stop repeating profiler captures
+Num9 = write an immediate diagnostic report
+
+Gameplay config changes save immediately and apply in the running game. Loading and server settings are startup settings and need a process restart.
+
+Fika, Dynamic Maps, SAIN, ORBIT, and BigBrain are optional. Missing optional mods are skipped safely. Ordinary non-Fika SPT works. The server companion is optional.
+
+PiP-Disabler 1.5.0 is included unmodified under the MIT license. See THIRD_PARTY_NOTICES.md.
+
+TO UNINSTALL
+Remove BepInEx\plugins\TarkovPerformanceSuite
+Remove BepInEx\plugins\PiP-Disabler if it was installed only by this package
+Remove BepInEx\config\com.lucaswilluweit.tarkovperformancesuite.cfg
+Remove BepInEx\config\com.lucaswilluweit.tarkovperformancesuite.loading.cfg
+Remove SPT\user\mods\TarkovPerformanceLoadingServer

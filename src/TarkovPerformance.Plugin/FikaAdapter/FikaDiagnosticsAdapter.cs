@@ -2,11 +2,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using Comfort.Common;
 using EFT;
 using TarkovPerformanceSuite.Features;
 using TarkovPerformanceSuite.RuntimeFeatures;
-using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace TarkovPerformanceSuite.FikaAdapter
 {
@@ -33,9 +32,11 @@ namespace TarkovPerformanceSuite.FikaAdapter
     internal sealed class FikaDiagnosticsAdapter
     {
         private Type _clientType;
-        private Object _client;
+        private object _client;
         private PropertyInfo _observedPlayers;
         private FieldInfo _serverFps;
+        private PropertyInfo _singletonInstantiated;
+        private PropertyInfo _singletonInstance;
         private float _nextDiscovery;
 
         internal bool Available => _clientType != null;
@@ -51,8 +52,17 @@ namespace TarkovPerformanceSuite.FikaAdapter
                 if (_clientType == null) return;
                 _observedPlayers = _clientType.GetProperty("ObservedPlayers", BindingFlags.Instance | BindingFlags.Public);
                 _serverFps = _clientType.GetField("ServerFPS", BindingFlags.Instance | BindingFlags.Public);
+                Type singleton = typeof(Singleton<>).MakeGenericType(_clientType);
+                _singletonInstantiated = singleton.GetProperty("Instantiated", BindingFlags.Static | BindingFlags.Public);
+                _singletonInstance = singleton.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public);
             }
-            _client = Object.FindObjectOfType(_clientType);
+            try
+            {
+                if (_singletonInstantiated != null && _singletonInstance != null
+                    && _singletonInstantiated.GetValue(null, null) is bool instantiated && instantiated)
+                    _client = _singletonInstance.GetValue(null, null);
+            }
+            catch { _client = null; }
         }
 
         internal void GetCounts(out int observed, out int observedAi, out int visibleObservedAi)

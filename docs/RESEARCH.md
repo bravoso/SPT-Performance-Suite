@@ -12,6 +12,9 @@ Primary sources consulted before implementation:
 - Fika public source: <https://github.com/project-fika/Fika-Plugin>
 - Fika headless client: <https://wiki.project-fika.com/advanced-features/headless-client>
 - SPT organization and 4.0.13 release: <https://github.com/sp-tarkov> and <https://github.com/sp-tarkov/build/releases/tag/4.0.13>
+- Official EFT 1.0.4.0 notes (client optimization and updated player culling on Customs, Interchange, and Reserve): <https://steamcommunity.com/games/3932890/announcements/detail/521994198580199494>
+- Official EFT 1.0.4.5 notes (animation/audio resource use, player culling rollout, and Streets object/geometry optimization): <https://steamcommunity.com/games/3932890/announcements/detail/685251502317503193>
+- Official EFT 1.0.5.0 notes (animation CPU reduction, audio leak fix, and experimental CPU-to-GPU light processing): <https://steamcommunity.com/app/3932890/discussions/1/842880822501639244/>
 
 The installed DLLs remain the authority. ILSpy inspection verified installed Fika `Update`, `ManualStateUpdate`, `ObservedPlayers`, `ServerFPS`, and `IsObservedAI`; EFT `Player`, `GameWorld`, `PlayerBody`, player lists, local flag, AI data, renderer methods; and SPT `ModulePatch` constructors plus `Enable`/`Disable` conventions.
 
@@ -19,6 +22,27 @@ BepInEx documentation confirms normal plugins are loaded from `BepInEx/plugins` 
 
 Fika's documentation says a headless raid host offloads AI calculations and other host work, while every playing client remains responsible for its own observed-player networking and presentation. Installed Fika 2.3.3 confirms this split: `FikaClient.Update()` polls packets and applies snapshots for each observed player, while observed-player late/visual updates execute on the playing client. The suite therefore leaves SAIN/BigBrain untouched and targets only client representation.
 
-Unity documents that disabling `SkinnedMeshRenderer.updateWhenOffscreen` stops offscreen skinned-mesh updates and can affect bounds for animation that exceeds imported bounds. The experiment is therefore distance-, visibility-, and hold-time-gated, immediately reversible, and disabled by default.
+Unity documents that disabling `SkinnedMeshRenderer.updateWhenOffscreen` stops offscreen skinned-mesh updates and can affect bounds for animation that exceeds imported bounds. The experiment is therefore distance-, visibility-, and hold-time-gated and immediately reversible through the Num4 A/B master.
 
-No external mod source code was copied. The implementation is original and uses public APIs plus installed metadata inspection, so third-party source-license compatibility did not need code-attribution handling.
+The suite's own performance features are original. Version 0.16.0 additionally packages the unmodified MIT-licensed PiP-Disabler 1.5.0 plugin, with its license and attribution, because a safe no-PiP mode requires its complete reticle, lens-mask, camera alignment, and scope-housing implementation.
+
+## Version 0.4 findings and mapping
+
+The official 2026 releases consistently target player culling, animation CPU use, audio resource use, and Streets environment/geometry. The installed 0.16.9 client already contains job-based observed-player culling and Fika wires remote players into it. Version 0.4 therefore consumes that existing authoritative visibility state to stop hidden animator work and amortize hidden prop/trigger-search presentation. It does not add per-player raycasts, alter packets, or throttle headless AI logic.
+
+The live game's newer Streets geometry and light-instancing assets cannot be safely recreated from the older SPT client DLL alone. Backporting them would require matching map bundles, shaders, serialized culling data, and the newer engine-side implementation. Version 0.4 does not pretend that a config toggle can reproduce those assets.
+
+Across the collected Customs captures, large 118-140 ms frames recur at approximately 15.05-second intervals regardless of visible AI, draw calls, or server activity. Installed SPT Detailed Bot Counter 1.7 is configured for 15 seconds and its update performs `Object.FindObjectOfType<GameWorld>()` before counting the already-available registered-player list. Version 0.4 exact-target patches that single call to use the suite's lifecycle-cached `GameWorld`; if the expected call is not found exactly once, the patch refuses to apply and leaves the external mod unchanged.
+
+The first friend 0.4 capture exposed a separate suite regression on an i7-2600K: 460-490 ms main-thread freezes repeated every 5.01 seconds in Woods and in the hideout with no AI. The friend did not have SPT Detailed Bot Counter, and the compatibility feature repeatedly called Harmony `AccessTools.TypeByName` for the absent type. That helper searches loaded assemblies/types and was extremely expensive on the old CPU. Version 0.5 replaces this with a one-time `Chainloader.PluginInfos` dictionary lookup and never retries when the optional plugin is absent.
+
+The hideout capture also had no Fika server-FPS samples, proving that no `FikaClient` object existed there. The diagnostics adapter previously retried `Object.FindObjectOfType(FikaClient)` on the same five-second cadence. Version 0.5 reads Fika's existing `Comfort.Common.Singleton<FikaClient>` through cached reflection instead, eliminating the scene traversal while retaining server-FPS diagnostics in raids.
+
+The same friend Woods capture delivered 41.1 effective FPS with a 24.3 ms main thread and 10.1 ms GPU time, confirming a main-thread limit. Removing the five-second freezes can recover frame delivery and lows, but cannot by itself turn the median 46 FPS into a guaranteed 60-70 FPS. Further gains therefore target only confirmed hidden remote presentation. Unity object access, transforms, renderers, and EFT state remain on the main thread; only immutable analysis/export work is suitable for worker threads.
+# PiP scope research (0.8.0 correction)
+
+- Tarkov 0.16.9 exposes one global `CameraClass.OpticCameraManager` (`GClass3687`) with `SetResolution`, a render texture, the current `OpticSight`, and an `OpticComponentUpdater.LateUpdate` pose pass.
+- Unity renders a camera with `targetTexture` into the whole render texture; changing `rect` or covering the outside of the scope does not avoid that render. See https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Camera-targetTexture.html.
+- Although Unity supports manually invoking `Camera.Render()`, the live 0.7 report measured roughly 4.1 ms in the suite's manual optic render and disabling HDR broke scope composition. Version 0.8 therefore never disables, manually renders, or rate-limits the optic camera and never mutates HDR.
+- Unity supports per-camera occlusion and layer culling, but Tarkov's layer semantics make generic distance cuts unsafe for targets seen through magnified optics. The retained implementation changes normal-optic resolution and optional MSAA only, leaving scheduling, HDR, culling masks, and far distance intact.
+- PiP-Disabler replaces the global base optic camera with main-camera FOV zoom while maintaining reticle, lens mask and scope housing. Version 0.16.0 packages and coordinates that implementation: https://github.com/Fiodorwellfme/PiP-Disabler.
