@@ -498,6 +498,7 @@ Issues and pull requests are welcome. A qualified maintainer may fork or take ov
 - Project direction, hardware testing, gameplay validation, and release: Lucas Willuweit.
 - Suite implementation and documentation: generated through OpenAI Codex under Lucas's direction and testing.
 - PiP-Disabler 1.5.0: Fiodorwellfme, included unmodified under the MIT license: <https://github.com/Fiodorwellfme/PiP-Disabler>.
+- Tyrian-DeClutterer: Xenoxia8953, researched as prior art for the high-level cosmetic-decluttering idea and clutter categories: <https://github.com/Xenoxia8953/Tyrian-DeClutterer>. No Tyrian source or binary is bundled; the suite uses a separately written, reversible renderer-only implementation. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - SPT, Fika, Dynamic Maps, SAIN, BigBrain, ORBIT, and Battlestate Games are separate projects and are not distributed as source dependencies by this repository.
 
 Tarkov Performance Suite is released under the [MIT License](LICENSE). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled third-party licensing.
