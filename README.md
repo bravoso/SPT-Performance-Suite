@@ -4,7 +4,7 @@ An experimental, profiler-first performance suite for SPT/Escape from Tarkov. It
 
 > Why can Tarkov run at 30-60 FPS while a capable GPU is only 30-50% utilized, and how much unnecessary CPU work can be removed without breaking the game?
 
-[Download the latest release](https://github.com/bravoso/SPT-Performance-Suite/releases/latest) · [Version 1.0.0 ZIP](https://github.com/bravoso/SPT-Performance-Suite/releases/download/v1.0.0/TarkovPerformanceSuite-1.0.0.zip) · [Changelog](CHANGELOG.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
+[Download the latest release](https://github.com/bravoso/SPT-Performance-Suite/releases/latest) · [Changelog](CHANGELOG.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## Important project status: AI-generated and looking for a maintainer
 
@@ -34,17 +34,15 @@ The objective is not to invent fake frames or blindly force 100% GPU usage. The 
 ### Hidden and distant characters
 
 - Reuses EFT/Fika visibility and baked PerfectCulling results instead of performing new full-scene searches.
-- Reduces arms, body, inverse-kinematics, animator, prop, trigger-search, and complex-late presentation work for confirmed hidden remote characters.
-- Beyond the configured distance, visible Fika observed proxies can update expensive presentation at a lower frequency.
-- Confirmed hidden distant Fika proxies can freeze presentation until they become relevant again.
-- Keeps snapshot interpolation, movement roots, network state, authoritative AI, damage, inventory, weapons, sound, and visibility checks active.
-- Never applies this presentation freeze to the local player, a playable headless authority, or ordinary authoritative SPT bots.
+- Uses that shared visibility information for reversible shadow and off-screen-skinning decisions.
+- The earlier arms/body/IK/animator/complex-late suppression is retired. It was correlated with stale replicated firing state and multi-second firing loops.
+- Vanilla `Player` and Fika observed-player update methods now always run, including for hidden distant entities.
 
 ### Distant combat presentation
 
 - Keeps nearby combat, incoming fire, damage, explosives, visible shooters, recently visible shooters, and positional gunshot audio.
-- On a non-host Fika client, a distant hidden shot can become sound-only only when baked map culling proves the shooter is hidden and a conservative trajectory corridor proves that the shot cannot approach the local player.
 - Suppresses eligible hidden/offscreen muzzle flashes, smoke, sparks, muzzle lights, impact particles, decals, casing physics, and remote flashlight contribution.
+- Never suppresses `FirearmController.InitiateShot`. The experimental sound-only replacement was retired after reports of stale firing presentation.
 - Retains the authoritative projectile and damage calculation on the Fika host/headless.
 - Leaves ordinary offline SPT ballistics authoritative on the local process.
 
@@ -177,7 +175,7 @@ The stress profile that changed development priorities identified these cumulati
 | `EFT.Player.ArmsUpdate` | 3,024.357 ms | 186,456 | Arms/hands presentation was expensive across remote observed players. |
 | `AutoEFT.AmbientLight.LateUpdate` | 1,966.105 ms | 9,274 | Ambient lighting rebuilt persistent render commands too frequently. |
 
-This directly produced the hidden/distant observed-player presentation budget and the ambient command-buffer refresh budget in 0.16.1.
+This produced two experiments in 0.16.1: the observed-player update budget and the ambient command-buffer refresh budget. The observed-player update suppression was later retired after firing-state problems; the ambient-light optimization remains.
 
 Other important discoveries:
 
@@ -204,6 +202,8 @@ This project did not keep every AI-generated idea:
 These failures are documented because they demonstrate why “just multithread it” is dangerous inside Unity.
 
 ## Performance results
+
+> **Safety-build warning:** the historical comparisons below were captured with the experimental observed-player and sound-only-shot paths enabled. Those paths are now retired. The safer build intentionally gives up their possible savings and must be benchmarked again before the old percentages are attributed to the current code.
 
 ### How to interpret the comparison
 
@@ -294,6 +294,7 @@ The latest Interchange test on this machine was not profiled, but the player rep
 | 0.16.2 | Parallelized safe loading preparation and loot serialization, added linear static-loot matching, and experimented with parallel scene preparation. |
 | 0.16.3 | Fixed the Streets 53% loading deadlock by separating concurrent bundle preload from serial Unity scene creation/activation. |
 | 1.0.0 | Production packaging, general presets, Extreme default, silent diagnostics, live config persistence, optional-dependency verification, documentation, licensing, and reproducible release checks. |
+| 1.0.1 | Removed every remote-player arms/body/IK/late-update patch plus the experimental Fika/ORBIT headless pacing after spectator testing confirmed unsafe bot firing behavior. |
 
 The detailed chronological record remains in [CHANGELOG.md](CHANGELOG.md).
 
@@ -310,7 +311,7 @@ The detailed chronological record remains in [CHANGELOG.md](CHANGELOG.md).
 
 ## Requirements and compatibility
 
-Version 1.0 was developed and built against:
+Version 1.0.x was developed and built against:
 
 - SPT 4.0.13
 - EFT 0.16.9.40087
@@ -326,19 +327,21 @@ Compatibility outside those versions is not guaranteed because EFT class/method 
 | Dynamic Maps | No | Map compatibility module reports unavailable and leaves maps untouched. |
 | SAIN | No | Optional profiler targets are skipped. AI remains unchanged. |
 | BigBrain | No | Optional profiler targets are skipped. |
-| ORBIT | No | Optional profiler/headless navigation pacing is skipped. |
+| ORBIT | No | Optional profiler targets are skipped. The suite never changes ORBIT timing. |
 | Server accelerator | No | Client and headless DLLs still work. |
 | PiP-Disabler | No | Full-resolution vanilla PiP remains. |
 | BepInEx Configuration Manager | Recommended | F12 GUI is unavailable without it, but config files and hotkeys still work. |
 
 The release verifier inspects compiled assembly references and confirms that the client/loading DLLs do not hard-link Fika, Dynamic Maps, SAIN, ORBIT, or BigBrain.
 
+Offline SPT can use the global quality, lighting, shadow, particles, PiP, declutter, frame-pacing, HUD, diagnostics, and loading features. Version 1.0.1 no longer suppresses player updates in either offline or Fika play; authoritative bots and observed proxies both retain vanilla arms, body, IK, late-update, and firearm state progression. Expect smaller and more variable gains when bot AI is the main bottleneck. The optional server component can change startup and HTTP response cost but cannot directly raise in-raid FPS.
+
 ## Installation
 
 ### Normal offline SPT
 
 1. Close EFT, the launcher, and the SPT server.
-2. Download `TarkovPerformanceSuite-1.0.0.zip` from the GitHub release.
+2. Download `TarkovPerformanceSuite-1.0.1.zip` from the GitHub release.
 3. Extract it into the root SPT game folder so the included `BepInEx` and `SPT` directories merge with the existing directories.
 4. Start SPT normally.
 
@@ -491,6 +494,8 @@ Areas where experienced contributors would be especially useful:
 - Test additional CPUs, especially older 4-core/8-thread systems, and additional GPUs/VRAM capacities.
 - Split experimental features from conservative production-safe modules.
 
+The current subsystem map, safety boundaries, and rollback ownership are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Formatting rules, the patch-review checklist, evidence requirements, and provenance policy are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 Issues and pull requests are welcome. A qualified maintainer may fork or take over the project under the MIT license as long as third-party attribution is preserved.
 
 ## Credits and license
@@ -499,6 +504,7 @@ Issues and pull requests are welcome. A qualified maintainer may fork or take ov
 - Suite implementation and documentation: generated through OpenAI Codex under Lucas's direction and testing.
 - PiP-Disabler 1.5.0: Fiodorwellfme, included unmodified under the MIT license: <https://github.com/Fiodorwellfme/PiP-Disabler>.
 - Tyrian-DeClutterer: Xenoxia8953, researched as prior art for the high-level cosmetic-decluttering idea and clutter categories: <https://github.com/Xenoxia8953/Tyrian-DeClutterer>. No Tyrian source or binary is bundled; the suite uses a separately written, reversible renderer-only implementation. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- CompoundingPerf: EchoStarz, credited as independent earlier prior art for selecting a faster SPT HTTP zlib compression level: <https://github.com/EchoStarz/CompoundingPerf>. No CompoundingPerf source, WebSocket implementation, or binary is bundled. The overlapping SPT method and compatibility warning are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - SPT, Fika, Dynamic Maps, SAIN, BigBrain, ORBIT, and Battlestate Games are separate projects and are not distributed as source dependencies by this repository.
 
 Tarkov Performance Suite is released under the [MIT License](LICENSE). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled third-party licensing.

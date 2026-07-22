@@ -1,5 +1,13 @@
 # Third-party notices
 
+## CompoundingPerf (independent prior art; not bundled)
+
+[CompoundingPerf](https://github.com/EchoStarz/CompoundingPerf) by EchoStarz independently changes SPT HTTP response compression from `CompressionLevel.SmallestSize` to a faster compression level. Its public implementation predates Tarkov Performance Suite's server-loading component.
+
+Tarkov Performance Suite does not include CompoundingPerf's source files, WebSocket changes, dependency-injection subclasses, compiled binary, or method bodies. A repository-wide source comparison performed on 2026-07-15 did not find a substantial matching code block. Both projects necessarily reproduce the small public response contract of SPT's `SptHttpListener.SendZlibJson`: status code, JSON content type, session cookie, zlib stream, and UTF-8 response bytes. The suite implements that contract as a Harmony prefix; CompoundingPerf implements it through a different listener/patch design.
+
+Do not enable both fast-compression patches at the same time. They target the same SPT method, so Harmony patch order can determine which replacement runs. This notice credits the earlier implementation and makes the overlap explicit; no CompoundingPerf code is relicensed or redistributed here. CompoundingPerf is MIT licensed.
+
 ## PiP-Disabler 1.5.0
 
 Tarkov Performance Suite packages the unmodified PiP-Disabler implementation by Fiodorwellfme to provide a complete non-PiP scope mode. It replaces the secondary optic render with main-camera FOV zoom, reticle rendering, lens masking, and scope-housing mesh handling. Source: https://github.com/Fiodorwellfme/PiP-Disabler

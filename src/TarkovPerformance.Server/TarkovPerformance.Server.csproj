@@ -13,7 +13,10 @@
 
   <Target Name="ValidateSptServerRoot" BeforeTargets="ResolveReferences">
     <Error Condition="'$(SptServerRoot)' == ''" Text="Set SPT_SERVER_ROOT or pass /p:SptServerRoot=..." />
-    <Error Condition="!Exists('$(SptServerRoot)\SPTarkov.Server.Core.dll')" Text="SPTarkov.Server.Core.dll was not found under $(SptServerRoot)." />
+    <Error
+      Condition="!Exists('$(SptServerRoot)\SPTarkov.Server.Core.dll')"
+      Text="SPTarkov.Server.Core.dll was not found under $(SptServerRoot)."
+    />
   </Target>
 
   <ItemGroup>

@@ -1,253 +1,383 @@
 using System;
 using System.Collections.Generic;
 
-namespace TarkovPerformanceSuite.Features
+namespace TarkovPerformanceSuite.Features;
+
+/// <summary>Identifies how aggressively an EFT entity may be presentation-budgeted.</summary>
+public enum EntityKind
 {
-    public enum EntityKind
+    LocalPlayer,
+    RemoteHuman,
+    RemoteAI,
+    UnknownPlayerLikeEntity,
+    Corpse,
+    NonPlayer,
+}
+
+/// <summary>Contains the stable signals used to classify an entity without retaining Unity objects.</summary>
+public readonly struct EntitySignals
+{
+    public EntitySignals(bool isPlayer, bool isLocal, bool hasVerifiedBotOwner, bool isFikaObserved, bool? isFikaObservedAi, bool isCorpse)
     {
-        LocalPlayer,
-        RemoteHuman,
-        RemoteAI,
-        UnknownPlayerLikeEntity,
-        Corpse,
-        NonPlayer
+        IsPlayer = isPlayer;
+        IsLocal = isLocal;
+        HasVerifiedBotOwner = hasVerifiedBotOwner;
+        IsFikaObserved = isFikaObserved;
+        IsFikaObservedAi = isFikaObservedAi;
+        IsCorpse = isCorpse;
     }
 
-    public readonly struct EntitySignals
+    public bool IsPlayer { get; }
+    public bool IsLocal { get; }
+    public bool HasVerifiedBotOwner { get; }
+    public bool IsFikaObserved { get; }
+    public bool? IsFikaObservedAi { get; }
+    public bool IsCorpse { get; }
+}
+
+/// <summary>Classifies local players, verified bots, Fika-observed players, corpses, and non-player objects.</summary>
+public static class EntityClassifierLogic
+{
+    public static EntityKind Classify(EntitySignals signals)
     {
-        public EntitySignals(bool isPlayer, bool isLocal, bool hasVerifiedBotOwner, bool isFikaObserved, bool? isFikaObservedAi, bool isCorpse)
+        if (signals.IsCorpse)
         {
-            IsPlayer = isPlayer;
-            IsLocal = isLocal;
-            HasVerifiedBotOwner = hasVerifiedBotOwner;
-            IsFikaObserved = isFikaObserved;
-            IsFikaObservedAi = isFikaObservedAi;
-            IsCorpse = isCorpse;
+            return EntityKind.Corpse;
         }
 
-        public bool IsPlayer { get; }
-        public bool IsLocal { get; }
-        public bool HasVerifiedBotOwner { get; }
-        public bool IsFikaObserved { get; }
-        public bool? IsFikaObservedAi { get; }
-        public bool IsCorpse { get; }
+        if (!signals.IsPlayer)
+        {
+            return EntityKind.NonPlayer;
+        }
+
+        if (signals.IsLocal)
+        {
+            return EntityKind.LocalPlayer;
+        }
+
+        if (signals.HasVerifiedBotOwner)
+        {
+            return EntityKind.RemoteAI;
+        }
+
+        if (signals.IsFikaObserved && signals.IsFikaObservedAi == true)
+        {
+            return EntityKind.RemoteAI;
+        }
+
+        if (signals.IsFikaObserved && signals.IsFikaObservedAi == false)
+        {
+            return EntityKind.RemoteHuman;
+        }
+
+        return EntityKind.UnknownPlayerLikeEntity;
+    }
+}
+
+/// <summary>Contains clamped distance and timing values safe for use by runtime features.</summary>
+public readonly struct ValidatedConfiguration
+{
+    public ValidatedConfiguration(
+        double captureSeconds,
+        double shadowDistance,
+        double updateIntervalSeconds,
+        double shadowMinimumDistance,
+        double shadowTargetFps,
+        double skinningDistance,
+        double skinningUpdateIntervalSeconds,
+        double skinningOffscreenHoldSeconds
+    )
+    {
+        CaptureSeconds = captureSeconds;
+        ShadowDistance = shadowDistance;
+        UpdateIntervalSeconds = updateIntervalSeconds;
+        ShadowMinimumDistance = shadowMinimumDistance;
+        ShadowTargetFps = shadowTargetFps;
+        SkinningDistance = skinningDistance;
+        SkinningUpdateIntervalSeconds = skinningUpdateIntervalSeconds;
+        SkinningOffscreenHoldSeconds = skinningOffscreenHoldSeconds;
     }
 
-    public static class EntityClassifierLogic
+    public double CaptureSeconds { get; }
+    public double ShadowDistance { get; }
+    public double UpdateIntervalSeconds { get; }
+    public double ShadowMinimumDistance { get; }
+    public double ShadowTargetFps { get; }
+    public double SkinningDistance { get; }
+    public double SkinningUpdateIntervalSeconds { get; }
+    public double SkinningOffscreenHoldSeconds { get; }
+}
+
+/// <summary>Clamps user-provided values so invalid configuration cannot create unsafe update rates.</summary>
+public static class ConfigurationValidator
+{
+    public static ValidatedConfiguration Validate(double captureSeconds, double shadowDistance, double updateIntervalSeconds)
     {
-        public static EntityKind Classify(EntitySignals signals)
-        {
-            if (signals.IsCorpse) return EntityKind.Corpse;
-            if (!signals.IsPlayer) return EntityKind.NonPlayer;
-            if (signals.IsLocal) return EntityKind.LocalPlayer;
-            if (signals.HasVerifiedBotOwner) return EntityKind.RemoteAI;
-            if (signals.IsFikaObserved && signals.IsFikaObservedAi == true) return EntityKind.RemoteAI;
-            if (signals.IsFikaObserved && signals.IsFikaObservedAi == false) return EntityKind.RemoteHuman;
-            return EntityKind.UnknownPlayerLikeEntity;
-        }
+        return Validate(captureSeconds, shadowDistance, updateIntervalSeconds, 60, 60, 80, 0.1, 0.5);
     }
 
-    public readonly struct ValidatedConfiguration
+    public static ValidatedConfiguration Validate(
+        double captureSeconds,
+        double shadowDistance,
+        double updateIntervalSeconds,
+        double shadowMinimumDistance,
+        double shadowTargetFps,
+        double skinningDistance,
+        double skinningUpdateIntervalSeconds,
+        double skinningOffscreenHoldSeconds
+    )
     {
-        public ValidatedConfiguration(
-            double captureSeconds,
-            double shadowDistance,
-            double updateIntervalSeconds,
-            double shadowMinimumDistance,
-            double shadowTargetFps,
-            double skinningDistance,
-            double skinningUpdateIntervalSeconds,
-            double skinningOffscreenHoldSeconds)
-        {
-            CaptureSeconds = captureSeconds;
-            ShadowDistance = shadowDistance;
-            UpdateIntervalSeconds = updateIntervalSeconds;
-            ShadowMinimumDistance = shadowMinimumDistance;
-            ShadowTargetFps = shadowTargetFps;
-            SkinningDistance = skinningDistance;
-            SkinningUpdateIntervalSeconds = skinningUpdateIntervalSeconds;
-            SkinningOffscreenHoldSeconds = skinningOffscreenHoldSeconds;
-        }
-        public double CaptureSeconds { get; }
-        public double ShadowDistance { get; }
-        public double UpdateIntervalSeconds { get; }
-        public double ShadowMinimumDistance { get; }
-        public double ShadowTargetFps { get; }
-        public double SkinningDistance { get; }
-        public double SkinningUpdateIntervalSeconds { get; }
-        public double SkinningOffscreenHoldSeconds { get; }
+        double validatedShadowDistance = Clamp(shadowDistance, 20, 1000);
+        return new ValidatedConfiguration(
+            Clamp(captureSeconds, 5, 900),
+            validatedShadowDistance,
+            Clamp(updateIntervalSeconds, 0.1, 5),
+            Clamp(shadowMinimumDistance, 20, validatedShadowDistance),
+            Clamp(shadowTargetFps, 20, 240),
+            Clamp(skinningDistance, 20, 1000),
+            Clamp(skinningUpdateIntervalSeconds, 0.05, 5),
+            Clamp(skinningOffscreenHoldSeconds, 0.1, 10)
+        );
     }
 
-    public static class ConfigurationValidator
+    private static double Clamp(double value, double min, double max)
     {
-        public static ValidatedConfiguration Validate(double captureSeconds, double shadowDistance, double updateIntervalSeconds)
+        if (double.IsNaN(value) || double.IsInfinity(value))
         {
-            return Validate(captureSeconds, shadowDistance, updateIntervalSeconds, 60, 60, 80, 0.1, 0.5);
+            return min;
         }
 
-        public static ValidatedConfiguration Validate(
-            double captureSeconds,
-            double shadowDistance,
-            double updateIntervalSeconds,
-            double shadowMinimumDistance,
-            double shadowTargetFps,
-            double skinningDistance,
-            double skinningUpdateIntervalSeconds,
-            double skinningOffscreenHoldSeconds)
-        {
-            double validatedShadowDistance = Clamp(shadowDistance, 20, 1000);
-            return new ValidatedConfiguration(
-                Clamp(captureSeconds, 5, 900),
-                validatedShadowDistance,
-                Clamp(updateIntervalSeconds, 0.1, 5),
-                Clamp(shadowMinimumDistance, 20, validatedShadowDistance),
-                Clamp(shadowTargetFps, 20, 240),
-                Clamp(skinningDistance, 20, 1000),
-                Clamp(skinningUpdateIntervalSeconds, 0.05, 5),
-                Clamp(skinningOffscreenHoldSeconds, 0.1, 10));
-        }
+        return value < min ? min
+            : value > max ? max
+            : value;
+    }
+}
 
-        private static double Clamp(double value, double min, double max)
-        {
-            if (double.IsNaN(value) || double.IsInfinity(value)) return min;
-            return value < min ? min : value > max ? max : value;
-        }
+/// <summary>Adjusts a culling distance gradually using FPS hysteresis rather than frame-by-frame oscillation.</summary>
+public sealed class AdaptiveDistanceController
+{
+    private double _smoothedFrameMs;
+    private double _pressureSeconds;
+    private double _recoverySeconds;
+
+    public double EffectiveDistance { get; private set; }
+    public double SmoothedFrameMs
+    {
+        get { return _smoothedFrameMs; }
     }
 
-    public sealed class AdaptiveDistanceController
+    public void Reset(double maximumDistance)
     {
-        private double _smoothedFrameMs;
-        private double _pressureSeconds;
-        private double _recoverySeconds;
+        EffectiveDistance = maximumDistance;
+        _smoothedFrameMs = 0;
+        _pressureSeconds = 0;
+        _recoverySeconds = 0;
+    }
 
-        public double EffectiveDistance { get; private set; }
-        public double SmoothedFrameMs => _smoothedFrameMs;
+    public double Update(double deltaSeconds, double frameTimeMs, double maximumDistance, double minimumDistance, double targetFps)
+    {
+        maximumDistance = Math.Max(20, maximumDistance);
+        minimumDistance = Math.Max(20, Math.Min(maximumDistance, minimumDistance));
+        targetFps = Math.Max(20, Math.Min(240, targetFps));
+        deltaSeconds = Math.Max(0, Math.Min(0.25, deltaSeconds));
 
-        public void Reset(double maximumDistance)
+        double targetFrameMs = 1000.0 / targetFps;
+        if (EffectiveDistance <= 0 || EffectiveDistance > maximumDistance)
         {
             EffectiveDistance = maximumDistance;
-            _smoothedFrameMs = 0;
+        }
+
+        if (_smoothedFrameMs <= 0)
+        {
+            _smoothedFrameMs = targetFrameMs;
+        }
+
+        double alpha = 1.0 - Math.Exp(-deltaSeconds / 0.5);
+        _smoothedFrameMs += (frameTimeMs - _smoothedFrameMs) * alpha;
+
+        if (_smoothedFrameMs > targetFrameMs + 1.0)
+        {
+            _pressureSeconds += deltaSeconds;
+            _recoverySeconds = 0;
+            if (_pressureSeconds >= 0.75)
+            {
+                EffectiveDistance = Math.Max(minimumDistance, EffectiveDistance - 15.0);
+                _pressureSeconds = 0;
+            }
+        }
+        else if (_smoothedFrameMs < targetFrameMs - 1.5)
+        {
+            _recoverySeconds += deltaSeconds;
+            _pressureSeconds = 0;
+            if (_recoverySeconds >= 4.0)
+            {
+                EffectiveDistance = Math.Min(maximumDistance, EffectiveDistance + 10.0);
+                _recoverySeconds = 0;
+            }
+        }
+        else
+        {
             _pressureSeconds = 0;
             _recoverySeconds = 0;
         }
 
-        public double Update(double deltaSeconds, double frameTimeMs, double maximumDistance, double minimumDistance, double targetFps)
+        if (EffectiveDistance < minimumDistance)
         {
-            maximumDistance = Math.Max(20, maximumDistance);
-            minimumDistance = Math.Max(20, Math.Min(maximumDistance, minimumDistance));
-            targetFps = Math.Max(20, Math.Min(240, targetFps));
-            deltaSeconds = Math.Max(0, Math.Min(0.25, deltaSeconds));
-
-            double targetFrameMs = 1000.0 / targetFps;
-            if (EffectiveDistance <= 0 || EffectiveDistance > maximumDistance) EffectiveDistance = maximumDistance;
-            if (_smoothedFrameMs <= 0) _smoothedFrameMs = targetFrameMs;
-            double alpha = 1.0 - Math.Exp(-deltaSeconds / 0.5);
-            _smoothedFrameMs += (frameTimeMs - _smoothedFrameMs) * alpha;
-
-            if (_smoothedFrameMs > targetFrameMs + 1.0)
-            {
-                _pressureSeconds += deltaSeconds;
-                _recoverySeconds = 0;
-                if (_pressureSeconds >= 0.75)
-                {
-                    EffectiveDistance = Math.Max(minimumDistance, EffectiveDistance - 15.0);
-                    _pressureSeconds = 0;
-                }
-            }
-            else if (_smoothedFrameMs < targetFrameMs - 1.5)
-            {
-                _recoverySeconds += deltaSeconds;
-                _pressureSeconds = 0;
-                if (_recoverySeconds >= 4.0)
-                {
-                    EffectiveDistance = Math.Min(maximumDistance, EffectiveDistance + 10.0);
-                    _recoverySeconds = 0;
-                }
-            }
-            else
-            {
-                _pressureSeconds = 0;
-                _recoverySeconds = 0;
-            }
-
-            if (EffectiveDistance < minimumDistance) EffectiveDistance = minimumDistance;
-            return EffectiveDistance;
+            EffectiveDistance = minimumDistance;
         }
+
+        return EffectiveDistance;
+    }
+}
+
+/// <summary>Disables a feature after repeated failures to keep optional optimizations from destabilizing a raid.</summary>
+public sealed class CircuitBreaker
+{
+    private readonly int _threshold;
+
+    public CircuitBreaker(int threshold)
+    {
+        if (threshold < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(threshold));
+        }
+
+        _threshold = threshold;
     }
 
-    public sealed class CircuitBreaker
+    public int ConsecutiveFailures { get; private set; }
+    public bool IsOpen { get; private set; }
+
+    public void Success()
     {
-        private readonly int _threshold;
-        public CircuitBreaker(int threshold)
-        {
-            if (threshold < 1) throw new ArgumentOutOfRangeException(nameof(threshold));
-            _threshold = threshold;
-        }
-        public int ConsecutiveFailures { get; private set; }
-        public bool IsOpen { get; private set; }
-        public void Success() { ConsecutiveFailures = 0; }
-        public bool Failure()
-        {
-            if (IsOpen) return true;
-            ConsecutiveFailures++;
-            if (ConsecutiveFailures >= _threshold) IsOpen = true;
-            return IsOpen;
-        }
-        public void Reset() { ConsecutiveFailures = 0; IsOpen = false; }
+        ConsecutiveFailures = 0;
     }
 
-    public sealed class TimeScheduler
+    public bool Failure()
     {
-        private readonly double _interval;
-        private double _next;
-        public TimeScheduler(double intervalSeconds)
+        if (IsOpen)
         {
-            if (intervalSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(intervalSeconds));
-            _interval = intervalSeconds;
-        }
-        public bool IsDue(double now)
-        {
-            if (now < _next) return false;
-            _next = now + _interval;
             return true;
         }
-        public void Reset(double now = 0) { _next = now; }
+
+        ConsecutiveFailures++;
+        if (ConsecutiveFailures >= _threshold)
+        {
+            IsOpen = true;
+        }
+
+        return IsOpen;
     }
 
-    public static class FrameWorkBudget
+    public void Reset()
     {
-        public static bool ShouldRun(int frame, int stableId, int divisor)
+        ConsecutiveFailures = 0;
+        IsOpen = false;
+    }
+}
+
+/// <summary>Provides allocation-free interval scheduling for work that does not need to run every frame.</summary>
+public sealed class TimeScheduler
+{
+    private readonly double _interval;
+    private double _next;
+
+    public TimeScheduler(double intervalSeconds)
+    {
+        if (intervalSeconds <= 0)
         {
-            if (divisor <= 1) return true;
-            int value = (frame & int.MaxValue) + (stableId & int.MaxValue);
-            return value % divisor == 0;
+            throw new ArgumentOutOfRangeException(nameof(intervalSeconds));
         }
+
+        _interval = intervalSeconds;
     }
 
-    public sealed class OriginalStateCache<TKey, TState>
+    public bool IsDue(double now)
     {
-        private readonly Dictionary<TKey, TState> _states = new Dictionary<TKey, TState>();
-        public int Count => _states.Count;
-        public bool Remember(TKey key, TState state)
+        if (now < _next)
         {
-            if (_states.ContainsKey(key)) return false;
-            _states.Add(key, state);
+            return false;
+        }
+
+        _next = now + _interval;
+        return true;
+    }
+
+    public void Reset(double now = 0)
+    {
+        _next = now;
+    }
+}
+
+/// <summary>Converts a target work rate into a stable per-frame item allowance.</summary>
+public static class FrameWorkBudget
+{
+    public static bool ShouldRun(int frame, int stableId, int divisor)
+    {
+        if (divisor <= 1)
+        {
             return true;
         }
-        public bool TryGet(TKey key, out TState state) => _states.TryGetValue(key, out state);
-        public bool RestoreOne(TKey key, Action<TKey, TState> apply)
+
+        int value = (frame & int.MaxValue) + (stableId & int.MaxValue);
+        return value % divisor == 0;
+    }
+}
+
+/// <summary>Stores original values once so every reversible feature can restore objects exactly.</summary>
+public sealed class OriginalStateCache<TKey, TState>
+{
+    private readonly Dictionary<TKey, TState> _states = new Dictionary<TKey, TState>();
+    public int Count
+    {
+        get { return _states.Count; }
+    }
+
+    public bool Remember(TKey key, TState state)
+    {
+        if (_states.ContainsKey(key))
         {
-            if (!_states.TryGetValue(key, out TState state)) return false;
-            apply(key, state);
-            _states.Remove(key);
-            return true;
+            return false;
         }
-        public void RestoreAll(Action<TKey, TState> apply)
+
+        _states.Add(key, state);
+        return true;
+    }
+
+    public bool TryGet(TKey key, out TState state)
+    {
+        return _states.TryGetValue(key, out state);
+    }
+
+    public bool RestoreOne(TKey key, Action<TKey, TState> apply)
+    {
+        if (!_states.TryGetValue(key, out TState state))
         {
-            foreach (KeyValuePair<TKey, TState> entry in _states) apply(entry.Key, entry.Value);
-            _states.Clear();
+            return false;
         }
-        public void Forget(TKey key) => _states.Remove(key);
-        public void Clear() => _states.Clear();
+
+        apply(key, state);
+        _states.Remove(key);
+        return true;
+    }
+
+    public void RestoreAll(Action<TKey, TState> apply)
+    {
+        foreach (KeyValuePair<TKey, TState> entry in _states)
+        {
+            apply(entry.Key, entry.Value);
+        }
+
+        _states.Clear();
+    }
+
+    public void Forget(TKey key)
+    {
+        _states.Remove(key);
+    }
+
+    public void Clear()
+    {
+        _states.Clear();
     }
 }

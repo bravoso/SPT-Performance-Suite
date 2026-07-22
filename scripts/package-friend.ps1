@@ -10,7 +10,7 @@ $paths = & (Join-Path $PSScriptRoot 'Resolve-SptPaths.ps1') -ReferenceRoot $Refe
 & (Join-Path $PSScriptRoot 'build-server.ps1') -ServerRoot (Join-Path $paths.ReferenceRoot 'SPT') -Configuration $Configuration
 & (Join-Path $PSScriptRoot 'build-pip-disabler.ps1') -ReferenceRoot $paths.ReferenceRoot -Configuration $Configuration
 
-$version = '1.0.0'
+$version = '1.0.1'
 $stage = Join-Path $repo "artifacts\TarkovPerformanceSuite-$version"
 $zip = "$stage.zip"
 $pluginDestination = Join-Path $stage 'BepInEx\plugins\TarkovPerformanceSuite'

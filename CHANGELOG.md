@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.1 - 2026-07-16 - combat-safety and maintainer refactor
+
+- Delete all Harmony suppression of observed-player `ArmsUpdate`, `BodyUpdate`, `FBBIKUpdate`, `ComplexLateUpdate`, and Fika visual/IK passes after spectator testing confirmed multi-second bot firing loops. Vanilla player and weapon updates now always run, and old saved settings cannot reinstall the removed patches.
+- Retire the sound-only `FirearmController.InitiateShot` replacement. Hidden combat may still cull distant muzzle, impact, casing, light, and flyby presentation, but the firearm method itself is never skipped.
+- Delete the experimental Fika bot-snapshot and ORBIT navigation pacing implementation while bot-combat behavior is independently validated. A compatibility tombstone forces old headless settings off without touching either dependency.
+- Mark the earlier performance figures as results from the experimental stack; the safer build must be benchmarked again because it deliberately gives up the highest-risk savings.
+- Apply the official SPT C# conventions through a checked-in `.editorconfig` and CSharpier: file-scoped namespaces, braces for every control-flow body, sorted outside-namespace using directives, and consistent layout.
+- Add XML documentation to every declared source type and rationale comments around authority, thread-safety, fail-open, and rollback boundaries.
+- Move named preset values out of the BepInEx lifecycle into `PerformancePresetApplier` without changing the shipped values.
+- Split the optional SPT server component into metadata, lifecycle, configuration, diagnostics, runtime, and patch files so its compression overlap can be reviewed independently.
+- Add a maintainer architecture map, patch-review checklist, evidence requirements, optional-dependency behavior, and explicit offline-SPT limitations.
+- Credit CompoundingPerf as independent earlier prior art for fast SPT HTTP compression and document the same-target Harmony conflict. No CompoundingPerf source or WebSocket implementation is included.
+- Rename misleading internal "authoritative Fika client" state to "Fika client world"; the affected path is client-side proxy presentation, not gameplay authority.
+
 ## 1.0.0 - 2026-07-15
 
 - Promote the complete client, loading, headless, and SPT server suite to the first production release.
